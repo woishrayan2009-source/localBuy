@@ -18,7 +18,7 @@
   // ─── Register the Service Worker ─────────────────────────────────────────
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('/js/sw.js', {
+      const registration = await navigator.serviceWorker.register('/sw.js', {
         scope: '/'
       });
 
