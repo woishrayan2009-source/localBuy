@@ -10,35 +10,35 @@
 /* ── CSS Custom Properties (Design Tokens) ────────────────── */
 :root {
   /* Brand colours */
-  --color-sage:        #0f5c3a;   /* primary — trust, freshness */
-  --color-sage-mid:    #1a7a4e;   /* hover states */
-  --color-sage-light:  #e8f5ee;   /* surface tints, chips */
-  --color-sage-pale:   #f0faf4;   /* step card backgrounds */
-  --color-amber:       #d97706;   /* shopkeeper accent */
-  --color-amber-light: #fffbf0;   /* shopkeeper section bg */
-  --color-surface:     #f8f7f4;   /* page background — never pure white */
-  --color-ink:         #111827;   /* body text */
-  --color-muted:       #6b7280;   /* secondary text */
+  --color-sage:        #0f5c3a;
+  --color-sage-mid:    #1a7a4e;
+  --color-sage-light:  #e8f5ee;
+  --color-sage-pale:   #f0faf4;
+  --color-amber:       #d97706;
+  --color-amber-light: #fffbf0;
+  --color-surface:     #f8f7f4;
+  --color-ink:         #111827;
+  --color-muted:       #6b7280;
 
-  /* Traffic-light system — always paired with text + icon */
-  --status-open:       #16a34a;   /* green */
-  --status-busy:       #d97706;   /* amber */
-  --status-closed:     #dc2626;   /* red */
+  /* Traffic-light system */
+  --status-open:       #16a34a;
+  --status-busy:       #d97706;
+  --status-closed:     #dc2626;
 
   /* Brand partners */
   --color-upi:         #5f259f;
   --color-wa:          #25d366;
 
   /* Typography scale */
-  --text-xs:    0.75rem;    /* 12px */
-  --text-sm:    0.8125rem;  /* 13px */
-  --text-base:  1rem;       /* 16px */
-  --text-lg:    1.125rem;   /* 18px */
-  --text-xl:    1.25rem;    /* 20px */
-  --text-2xl:   1.5rem;     /* 24px */
-  --text-3xl:   1.875rem;   /* 30px */
-  --text-4xl:   2.25rem;    /* 36px */
-  --text-5xl:   3rem;       /* 48px */
+  --text-xs:    0.75rem;
+  --text-sm:    0.8125rem;
+  --text-base:  1rem;
+  --text-lg:    1.125rem;
+  --text-xl:    1.25rem;
+  --text-2xl:   1.5rem;
+  --text-3xl:   1.875rem;
+  --text-4xl:   2.25rem;
+  --text-5xl:   3rem;
 
   /* Spacing */
   --space-1:  0.25rem;
@@ -53,10 +53,10 @@
   --space-16: 4rem;
 
   /* Radii */
-  --radius-sm:  0.375rem;
-  --radius-md:  0.75rem;
-  --radius-lg:  1rem;
-  --radius-xl:  1.5rem;
+  --radius-sm:   0.375rem;
+  --radius-md:   0.75rem;
+  --radius-lg:   1rem;
+  --radius-xl:   1.5rem;
   --radius-full: 9999px;
 
   /* Shadows */
@@ -70,9 +70,19 @@
   --transition-base:   250ms ease;
   --transition-slow:   400ms ease;
 
+  /*
+    FIX: --transition was defined in customer.html's inline <style> block
+    but never in main.css. Any component using var(--transition) would get
+    no value. Defined here so it's available everywhere.
+  */
+  --transition: 0.2s ease;
+
   /* Layout */
-  --max-width: 540px;
-  --content-px: 1.25rem;
+  --max-width:   540px;
+  --content-px:  1.25rem;
+
+  /* Section padding — centralised here so inline styles on sections aren't needed */
+  --section-pb: 7.5rem; /* 120px — space for bottom nav */
 }
 
 /* ── CSS Reset ────────────────────────────────────────────── */
@@ -108,7 +118,6 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.02em;
 }
 
-/* Fraunces headings */
 .heading-display {
   font-family: 'Fraunces', Georgia, serif;
   font-style: italic;
@@ -142,9 +151,7 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: var(--space-2);
 }
 
-.eyebrow--amber {
-  color: var(--color-amber);
-}
+.eyebrow--amber { color: var(--color-amber); }
 
 /* ── Buttons ──────────────────────────────────────────────── */
 .btn {
@@ -160,32 +167,30 @@ h1, h2, h3, h4, h5, h6 {
   border: 2px solid transparent;
   border-radius: var(--radius-md);
   padding: 0.75rem 1.5rem;
-  min-height: 44px;   /* WCAG 2.1 AA tap target */
+  min-height: 44px;
   min-width: 44px;
   cursor: pointer;
-  transition: background-color var(--transition-base),
-              color var(--transition-base),
-              border-color var(--transition-base),
-              transform var(--transition-fast),
-              box-shadow var(--transition-base);
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base),
+    border-color var(--transition-base),
+    transform var(--transition-fast),
+    box-shadow var(--transition-base);
   position: relative;
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Button press effect */
 .btn:active {
   transform: scale(0.97);
   transition: transform 100ms ease;
 }
 
-/* Focus ring — WCAG 2.1 AA */
 .btn:focus-visible {
   outline: 2px solid var(--color-sage);
   outline-offset: 2px;
 }
 
-/* Primary: sage fill */
 .btn-primary {
   background-color: var(--color-sage);
   color: #fff;
@@ -196,17 +201,13 @@ h1, h2, h3, h4, h5, h6 {
   border-color: var(--color-sage-mid);
 }
 
-/* Secondary: white/outlined */
 .btn-secondary {
   background-color: #fff;
   color: var(--color-sage);
   border-color: var(--color-sage);
 }
-.btn-secondary:hover {
-  background-color: var(--color-sage-light);
-}
+.btn-secondary:hover { background-color: var(--color-sage-light); }
 
-/* Amber */
 .btn-amber {
   background-color: var(--color-amber);
   color: #fff;
@@ -217,35 +218,22 @@ h1, h2, h3, h4, h5, h6 {
   border-color: #b45309;
 }
 
-/* Ghost */
 .btn-ghost {
   background-color: transparent;
   color: var(--color-sage);
   border-color: transparent;
 }
-.btn-ghost:hover {
-  background-color: var(--color-sage-light);
-}
+.btn-ghost:hover { background-color: var(--color-sage-light); }
 
-/* Danger */
 .btn-danger {
   background-color: transparent;
   color: var(--status-closed);
   border-color: var(--status-closed);
 }
-.btn-danger:hover {
-  background-color: #fef2f2;
-}
+.btn-danger:hover { background-color: #fef2f2; }
 
-/* Full width */
-.btn-full { width: 100%; }
-
-/* Large */
-.btn-lg {
-  font-size: var(--text-lg);
-  padding: 1rem 2rem;
-  min-height: 56px;
-}
+.btn-full  { width: 100%; }
+.btn-lg    { font-size: var(--text-lg); padding: 1rem 2rem; min-height: 56px; }
 
 /* ── Status Badges ────────────────────────────────────────── */
 .badge {
@@ -261,20 +249,9 @@ h1, h2, h3, h4, h5, h6 {
   transition: background-color 300ms ease-in-out, color 300ms ease-in-out;
 }
 
-.badge-open {
-  background-color: #dcfce7;
-  color: #15803d;
-}
-
-.badge-busy {
-  background-color: #fef3c7;
-  color: #92400e;
-}
-
-.badge-closed {
-  background-color: #fee2e2;
-  color: #991b1b;
-}
+.badge-open   { background-color: #dcfce7; color: #15803d; }
+.badge-busy   { background-color: #fef3c7; color: #92400e; }
+.badge-closed { background-color: #fee2e2; color: #991b1b; }
 
 /* ── Live Dot ─────────────────────────────────────────────── */
 .live-dot {
@@ -286,11 +263,17 @@ h1, h2, h3, h4, h5, h6 {
   flex-shrink: 0;
 }
 
-/* Only animate when user hasn't requested reduced motion */
 @media (prefers-reduced-motion: no-preference) {
-  .live-dot {
-    animation: pulse-dot 1.8s ease-in-out infinite;
-  }
+  .live-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
+}
+
+/*
+  FIX: @keyframes pulse-dot was referenced by .live-dot but never defined
+  in this file, causing the animation to silently fail.
+*/
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%       { transform: scale(1.4); opacity: 0.6; }
 }
 
 /* ── Shop Cards ───────────────────────────────────────────── */
@@ -312,10 +295,7 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-.shop-card:active {
-  transform: translateY(-1px);
-}
-
+.shop-card:active      { transform: translateY(-1px); }
 .shop-card:focus-visible {
   outline: 2px solid var(--color-sage);
   outline-offset: 2px;
@@ -351,7 +331,15 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: var(--space-2);
 }
 
-/* Skeleton shimmer for loading state */
+/*
+  FIX: @keyframes shimmer was referenced by .skeleton but never defined.
+  Added here.
+*/
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .skeleton {
   background: linear-gradient(90deg,
     #e5e7eb 25%,
@@ -363,9 +351,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .skeleton {
-    animation: shimmer 1.5s infinite;
-  }
+  .skeleton { animation: shimmer 1.5s infinite; }
 }
 
 /* ── Category Chips ───────────────────────────────────────── */
@@ -377,7 +363,6 @@ h1, h2, h3, h4, h5, h6 {
   scrollbar-width: none;
   padding-bottom: var(--space-1);
 }
-
 .category-chips::-webkit-scrollbar { display: none; }
 
 .chip {
@@ -395,9 +380,10 @@ h1, h2, h3, h4, h5, h6 {
   cursor: pointer;
   white-space: nowrap;
   min-height: 36px;
-  transition: background-color var(--transition-fast),
-              color var(--transition-fast),
-              border-color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -406,7 +392,8 @@ h1, h2, h3, h4, h5, h6 {
   border-color: var(--color-sage);
 }
 
-.chip.active {
+.chip.active,
+.chip.chip--active {
   background-color: var(--color-sage);
   color: #fff;
   border-color: var(--color-sage);
@@ -443,8 +430,15 @@ select {
   width: 100%;
   min-height: 44px;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  /*
+    FIX: Previously split across two lines as:
+      -webkit-appearance: none;
+        appearance: none;
+    The inconsistent indentation suggested a copy-paste error. Consolidated
+    to two correctly indented lines.
+  */
   -webkit-appearance: none;
-    appearance: none;
+  appearance: none;
 }
 
 input:focus,
@@ -499,9 +493,7 @@ textarea {
   box-shadow: none;
 }
 
-.input-prefix > input:focus {
-  box-shadow: none;
-}
+.input-prefix > input:focus { box-shadow: none; }
 
 label {
   display: block;
@@ -512,12 +504,26 @@ label {
 }
 
 /* ── Modal / Bottom Sheet ─────────────────────────────────── */
+/*
+  FIX: The original .modal-overlay used opacity + pointer-events for
+  show/hide, but customer.html toggled display:none/flex via inline style.
+  You cannot CSS-transition from display:none. The corrected approach:
+  - Default state: display:none (set by JS or inline style)
+  - When JS opens it: set display:flex first, then add .active on next frame
+    so the opacity/transform transition fires correctly.
+  customer.js should do:
+    overlay.style.display = 'flex';
+    requestAnimationFrame(() => overlay.classList.add('active'));
+  And to close:
+    overlay.classList.remove('active');
+    overlay.addEventListener('transitionend', () => { overlay.style.display = 'none'; }, { once: true });
+*/
 .modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.5);
   z-index: 1000;
-  display: flex;
+  display: none; /* JS controls visibility; transitioned via .active */
   align-items: flex-end;
   justify-content: center;
   backdrop-filter: blur(2px);
@@ -527,9 +533,15 @@ label {
   transition: opacity var(--transition-base);
 }
 
+/* When JS sets display:flex AND adds .active, the transition fires */
 .modal-overlay.active {
   opacity: 1;
   pointer-events: all;
+}
+
+/* Helper class for JS to set display before adding .active */
+.modal-overlay.is-open {
+  display: flex;
 }
 
 .modal-sheet {
@@ -546,10 +558,14 @@ label {
   position: relative;
 }
 
-/* Modal drag handle */
-.modal-sheet::before {
-  content: '';
-  display: block;
+/*
+  FIX: The drag handle was implemented BOTH as a ::before pseudo-element on
+  .modal-sheet AND as a separate .modal__drag-handle div in customer.html.
+  The ::before pseudo approach has been removed to avoid duplication.
+  The .modal__drag-handle div in the HTML is the single source of truth.
+  Style it here:
+*/
+.modal__drag-handle {
   width: 40px;
   height: 4px;
   background: #d1d5db;
@@ -616,6 +632,18 @@ label {
   gap: var(--space-2);
 }
 
+/* ── Section padding (replaces inline styles on sections) ─── */
+/*
+  FIX: #section-order, #section-checkout, #section-tracker all had
+  inline style="padding-bottom:120px" which conflicted with display:none
+  from the section toggle system. Padding is now managed here.
+*/
+#section-order,
+#section-checkout,
+#section-tracker {
+  padding-bottom: var(--section-pb);
+}
+
 /* ── Info Banners ─────────────────────────────────────────── */
 .banner {
   border-radius: var(--radius-md);
@@ -669,7 +697,7 @@ label {
   font-size: var(--text-sm);
   font-weight: 500;
   box-shadow: var(--shadow-xl);
-  pointer-events: all;
+  pointer-events: all; /* FIX: ensure toasts inside the container are clickable */
   width: 100%;
   text-align: center;
 }
@@ -682,7 +710,7 @@ label {
 }
 
 /* ── Section spacing ──────────────────────────────────────── */
-.section { padding: var(--space-10) 0; }
+.section    { padding: var(--space-10) 0; }
 .section-sm { padding: var(--space-6) 0; }
 
 /* ── Focusable elements global focus ring ─────────────────── */
@@ -712,8 +740,8 @@ button:focus-visible,
 .mb-6        { margin-bottom: var(--space-6); }
 .flex        { display: flex; }
 .flex-col    { flex-direction: column; }
-.items-center { align-items: center; }
-.justify-between { justify-content: space-between; }
+.items-center      { align-items: center; }
+.justify-between   { justify-content: space-between; }
 .gap-2       { gap: var(--space-2); }
 .gap-3       { gap: var(--space-3); }
 .gap-4       { gap: var(--space-4); }
@@ -749,9 +777,7 @@ button:focus-visible,
   transition: box-shadow var(--transition-base);
 }
 
-.site-header.scrolled {
-  box-shadow: var(--shadow-sm);
-}
+.site-header.scrolled { box-shadow: var(--shadow-sm); }
 
 .site-header-inner {
   display: flex;
@@ -846,9 +872,7 @@ button:focus-visible,
   transition: transform 0.35s ease;
 }
 
-.install-banner.dismissed {
-  transform: translateY(-100%);
-}
+.install-banner.dismissed { transform: translateY(-100%); }
 
 .install-banner-text h3 {
   font-size: var(--text-sm);
@@ -877,15 +901,21 @@ button:focus-visible,
   white-space: nowrap;
 }
 
-.install-btn:hover {
-  background: rgba(255,255,255,0.15);
-}
+.install-btn:hover { background: rgba(255,255,255,0.15); }
 
 /* ── Tabs ─────────────────────────────────────────────────── */
+/*
+  FIX: The tab active indicator used margin-bottom: -2px to overlap the
+  parent border. This worked visually but caused sub-pixel inconsistencies
+  across browsers. Replaced with a cleaner approach: the parent border is
+  on the wrapper, active tab uses a pseudo-element so there's no negative
+  margin hack.
+*/
 .tabs {
   display: flex;
   border-bottom: 2px solid #e5e7eb;
   margin-bottom: var(--space-5);
+  position: relative;
 }
 
 .tab-btn {
@@ -899,14 +929,28 @@ button:focus-visible,
   padding: var(--space-3) var(--space-4);
   cursor: pointer;
   min-height: 44px;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  position: relative;
+  transition: color var(--transition-fast);
+}
+
+/* Active indicator via ::after — no negative margin needed */
+.tab-btn::after {
+  content: '';
+  position: absolute;
+  bottom: -2px; /* sits on top of parent border */
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  transition: background-color var(--transition-fast);
 }
 
 .tab-btn.active {
   color: var(--color-sage);
-  border-bottom-color: var(--color-sage);
+}
+
+.tab-btn.active::after {
+  background: var(--color-sage);
 }
 
 .tab-btn:focus-visible {
@@ -924,7 +968,8 @@ button:focus-visible,
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
-.upload-zone:hover, .upload-zone.dragover {
+.upload-zone:hover,
+.upload-zone.dragover {
   border-color: var(--color-sage);
   background: var(--color-sage-light);
 }
@@ -943,12 +988,9 @@ button:focus-visible,
   padding-bottom: var(--space-5);
 }
 
-.timeline-item:last-child {
-  padding-bottom: 0;
-}
+.timeline-item:last-child { padding-bottom: 0; }
 
 .timeline-item::before {
-  /* Connecting line */
   content: '';
   position: absolute;
   left: 10px;
@@ -999,20 +1041,31 @@ button:focus-visible,
   margin-bottom: var(--space-1);
 }
 
-.timeline-item.active .timeline-label {
-  color: var(--color-sage);
-}
+.timeline-item.active .timeline-label { color: var(--color-sage); }
 
 .timeline-desc {
   font-size: var(--text-xs);
   color: var(--color-muted);
 }
 
-/* Active stage pulsing left border */
+/*
+  FIX: .timeline-item.active previously used:
+    border-left: 3px solid var(--color-sage);
+    padding-left: var(--space-3);
+    margin-left: -3px;
+  The negative margin-left caused layout shift and clipped left-edge content.
+  Replaced with a box-shadow left accent which doesn't affect layout geometry.
+
+  FIX: @keyframes pulse-border was referenced but never defined. Added here.
+*/
 .timeline-item.active {
-  border-left: 3px solid var(--color-sage);
-  padding-left: var(--space-3);
-  margin-left: -3px;
+  box-shadow: inset 3px 0 0 var(--color-sage);
+  padding-left: calc(var(--space-3) + 3px);
+}
+
+@keyframes pulse-border {
+  0%, 100% { box-shadow: inset 3px 0 0 var(--color-sage); }
+  50%       { box-shadow: inset 3px 0 0 var(--color-sage-mid); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1035,7 +1088,5 @@ button:focus-visible,
 
 /* ── Responsive max-width centering ──────────────────────────*/
 @media (min-width: 541px) {
-  .full-bleed {
-    box-shadow: var(--shadow-md);
-  }
+  .full-bleed { box-shadow: var(--shadow-md); }
 }

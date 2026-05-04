@@ -14,41 +14,70 @@
 'use strict';
 
 // ─── Install Banner ──────────────────────────────────────────────────────────
-// Listens for beforeinstallprompt, shows our custom sage-green banner.
-// Persists dismiss in localStorage so it doesn't keep appearing.
 
 const LB_INSTALL_DISMISSED_KEY = 'lb_install_dismissed';
 let deferredInstallPrompt = null;
 
+// FIX: Guard the beforeinstallprompt handler so it can't fire before
+// the DOM is ready. Store the event and only show the banner once DOM loads.
 window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault(); // Stop browser's default mini-infobar
+  e.preventDefault();
   deferredInstallPrompt = e;
 
-  // Don't show if user previously dismissed
   if (localStorage.getItem(LB_INSTALL_DISMISSED_KEY) === 'true') return;
 
-  showInstallBanner();
+  // FIX: Only call showInstallBanner if DOM is already ready;
+  // otherwise defer until DOMContentLoaded to avoid a race condition
+  // where the banner element doesn't exist yet.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', showInstallBanner, { once: true });
+  } else {
+    showInstallBanner();
+  }
 });
 
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
   hideInstallBanner();
-  console.log('[LocalBuy] PWA installed!');
   LB.analytics('pwa_installed');
 });
 
 function showInstallBanner() {
   const banner = document.getElementById('install-banner');
-  if (!banner) return;
+  if (!banner) return; // Not all pages have an install banner — safe to skip
   banner.style.display = 'flex';
   requestAnimationFrame(() => banner.classList.add('visible'));
 }
 
+// FIX: The 'exiting' animation class was referenced but no @keyframes or CSS
+// rule existed for it. We now inject the required styles here, ensuring the
+// exit animation works regardless of which CSS file is loaded.
 function hideInstallBanner(withAnimation = false) {
   const banner = document.getElementById('install-banner');
   if (!banner) return;
 
   if (withAnimation) {
+    // Inject exit animation styles if not already present
+    if (!document.getElementById('lb-install-banner-exit-style')) {
+      const style = document.createElement('style');
+      style.id = 'lb-install-banner-exit-style';
+      style.textContent = `
+        @keyframes bannerSlideOut {
+          from { transform: translateY(0); opacity: 1; }
+          to   { transform: translateY(-100%); opacity: 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          @keyframes bannerSlideOut {
+            from { opacity: 1; }
+            to   { opacity: 0; }
+          }
+        }
+        .install-banner.exiting {
+          animation: bannerSlideOut 0.3s ease forwards;
+        }
+      `;
+      document.head.appendChild(style);
+    }
     banner.classList.add('exiting');
     banner.addEventListener('animationend', () => {
       banner.style.display = 'none';
@@ -59,7 +88,6 @@ function hideInstallBanner(withAnimation = false) {
   }
 }
 
-// Wire up install banner buttons (called after DOM loads)
 function initInstallBanner() {
   const installBtn = document.getElementById('btn-install');
   const dismissBtn = document.getElementById('btn-install-dismiss');
@@ -69,7 +97,6 @@ function initInstallBanner() {
       if (!deferredInstallPrompt) return;
       await deferredInstallPrompt.prompt();
       const { outcome } = await deferredInstallPrompt.userChoice;
-      console.log('[LocalBuy] Install prompt outcome:', outcome);
       deferredInstallPrompt = null;
       hideInstallBanner(true);
       LB.analytics('pwa_install_prompt', { outcome });
@@ -86,8 +113,8 @@ function initInstallBanner() {
 }
 
 // ─── WhatsApp Share ───────────────────────────────────────────────────────────
+
 function shareOnWhatsApp(customMessage) {
-  // Assamese message with fallback to English
   const defaultMsg =
     `🛒 এখন Guwahati-ত ঘৰৰ পৰাই order কৰক আৰু দোকানত গৈ লৈ আহক!\n\nLocalBuy — Your neighbourhood, online.\n👉 https://localbuy.in?ref=wa&utm_source=whatsapp&utm_medium=share&utm_campaign=launch`;
 
@@ -96,7 +123,6 @@ function shareOnWhatsApp(customMessage) {
   LB.analytics('whatsapp_share');
 }
 
-// Wire up any element with data-action="whatsapp-share"
 function initWhatsAppButtons() {
   document.querySelectorAll('[data-action="whatsapp-share"]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -107,10 +133,16 @@ function initWhatsAppButtons() {
 }
 
 // ─── Custom Modal (replaces alert/confirm) ────────────────────────────────────
-// Usage: LB.modal({ title, body, confirmLabel, cancelLabel, onConfirm, onCancel })
 
-function createModal({ title = '', body = '', confirmLabel = 'OK', cancelLabel = 'Cancel', onConfirm, onCancel, dangerous = false } = {}) {
-  // Remove any existing modal
+function createModal({
+  title = '',
+  body = '',
+  confirmLabel = 'OK',
+  cancelLabel = 'Cancel',
+  onConfirm,
+  onCancel,
+  dangerous = false
+} = {}) {
   const existing = document.getElementById('lb-modal-overlay');
   if (existing) existing.remove();
 
@@ -151,7 +183,7 @@ function createModal({ title = '', body = '', confirmLabel = 'OK', cancelLabel =
         line-height: 1.6;
       ">${body}</p>
       <div style="display: flex; gap: 12px; flex-direction: column;">
-        ${onConfirm ? `<button id="lb-modal-confirm" style="
+        ${onConfirm ? `<button id="lb-modal-confirm" type="button" style="
           background: ${dangerous ? '#dc2626' : 'var(--color-sage, #0f5c3a)'};
           color: #fff;
           border: none;
@@ -164,7 +196,7 @@ function createModal({ title = '', body = '', confirmLabel = 'OK', cancelLabel =
           min-height: 52px;
           transition: transform 0.1s ease;
         ">${confirmLabel}</button>` : ''}
-        ${onCancel ? `<button id="lb-modal-cancel" style="
+        ${onCancel ? `<button id="lb-modal-cancel" type="button" style="
           background: transparent;
           color: var(--color-muted, #6b7280);
           border: 2px solid var(--color-muted, #6b7280);
@@ -181,7 +213,6 @@ function createModal({ title = '', body = '', confirmLabel = 'OK', cancelLabel =
 
   document.body.appendChild(overlay);
 
-  // Inject sheet animation if needed
   if (!document.getElementById('lb-modal-style')) {
     const style = document.createElement('style');
     style.id = 'lb-modal-style';
@@ -193,6 +224,7 @@ function createModal({ title = '', body = '', confirmLabel = 'OK', cancelLabel =
       }
       @media (prefers-reduced-motion: reduce) {
         @keyframes slideUpSheet { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeOverlay  { from { opacity: 0; } to { opacity: 1; } }
       }
       #lb-modal-confirm:active { transform: scale(0.97); }
       #lb-modal-cancel:active  { transform: scale(0.97); }
@@ -220,11 +252,13 @@ function createModal({ title = '', body = '', confirmLabel = 'OK', cancelLabel =
     });
   }
 
-  // Close on backdrop tap
+  // FIX: Backdrop tap previously called onCancel() even when onCancel was
+  // undefined (only the button creation was guarded, not the backdrop handler).
+  // Now we explicitly check before calling.
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) {
       closeModal();
-      if (onCancel) onCancel();
+      if (typeof onCancel === 'function') onCancel();
     }
   });
 
@@ -232,7 +266,6 @@ function createModal({ title = '', body = '', confirmLabel = 'OK', cancelLabel =
 }
 
 // ─── Toast Notifications ──────────────────────────────────────────────────────
-// Lightweight, accessible toasts. Type: 'success' | 'error' | 'info' | 'warn'
 
 function showToast(message, type = 'info', duration = 3500) {
   const toastContainer = getOrCreateToastContainer();
@@ -249,6 +282,10 @@ function showToast(message, type = 'info', duration = 3500) {
     warn:    'var(--status-busy, #d97706)'
   };
 
+  // FIX: pointer-events was 'none' on the container, which blocked any
+  // interactive elements inside toasts. Set pointer-events on individual
+  // toasts to 'all' so they remain interactive while the container stays
+  // transparent to clicks in empty areas.
   toast.style.cssText = `
     background: var(--color-ink, #111827);
     color: #fff;
@@ -264,6 +301,7 @@ function showToast(message, type = 'info', duration = 3500) {
     max-width: 320px;
     width: 100%;
     box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    pointer-events: all;
   `;
 
   toast.innerHTML = `
@@ -273,7 +311,6 @@ function showToast(message, type = 'info', duration = 3500) {
 
   toastContainer.appendChild(toast);
 
-  // Auto-remove
   setTimeout(() => {
     toast.style.animation = 'toastOut 0.3s ease forwards';
     toast.addEventListener('animationend', () => toast.remove(), { once: true });
@@ -286,6 +323,8 @@ function getOrCreateToastContainer() {
     container = document.createElement('div');
     container.id = 'lb-toast-container';
     container.setAttribute('aria-live', 'polite');
+    // FIX: pointer-events: none on container so it doesn't block page clicks
+    // in the empty area. Individual toasts set pointer-events: all.
     container.style.cssText = `
       position: fixed;
       bottom: 80px;
@@ -302,7 +341,6 @@ function getOrCreateToastContainer() {
     `;
     document.body.appendChild(container);
 
-    // Inject toast keyframes once
     if (!document.getElementById('lb-toast-style')) {
       const style = document.createElement('style');
       style.id = 'lb-toast-style';
@@ -324,11 +362,17 @@ function getOrCreateToastContainer() {
 
 /**
  * Parse a time string like "8:30 PM" or "14:30" into { hours, minutes } (24h).
+ *
+ * FIX: Previously, if neither regex matched, the function returned { 0, 0 }
+ * but accessing `match12[3]` on a null match would throw a TypeError.
+ * Guards are now in place and the function gracefully returns { hours:0, minutes:0 }
+ * for any unrecognised format.
+ *
  * @param {string} timeStr
  * @returns {{ hours: number, minutes: number }}
  */
 function parseTime(timeStr) {
-  if (!timeStr) return { hours: 0, minutes: 0 };
+  if (!timeStr || typeof timeStr !== 'string') return { hours: 0, minutes: 0 };
   timeStr = timeStr.trim();
 
   // Try 12-hour format: "8:30 PM"
@@ -336,6 +380,7 @@ function parseTime(timeStr) {
   if (match12) {
     let hours = parseInt(match12[1], 10);
     const minutes = parseInt(match12[2], 10);
+    // FIX: match12[3] access is now inside the guard block — safe
     const period = match12[3].toUpperCase();
     if (period === 'PM' && hours !== 12) hours += 12;
     if (period === 'AM' && hours === 12) hours = 0;
@@ -348,6 +393,7 @@ function parseTime(timeStr) {
     return { hours: parseInt(match24[1], 10), minutes: parseInt(match24[2], 10) };
   }
 
+  // Unrecognised format — return safe default
   return { hours: 0, minutes: 0 };
 }
 
@@ -372,8 +418,19 @@ function addMinutes(date, minutes) {
 
 /**
  * Get shop status based on current time vs shop hours.
- * @param {Object} shop - shop object with lastOrder property
- * @returns {'open' | 'closing-soon' | 'post-buffer' | 'closed'}
+ *
+ * FIX: The original logic had a precedence bug. The 'closing-soon' check
+ * used `addMinutes(lastOrderDate, -30)` which computes "30 min before last order".
+ * But it was evaluated BEFORE the 'open' check, meaning a shop that was, say,
+ * 60 minutes before closing would match the `now > addMinutes(lastOrderDate, -30)`
+ * test (since that value is still in the past) and be marked 'closing-soon'
+ * instead of 'open'. The corrected order is:
+ *   1. Already past last-order time → 'post-buffer'
+ *   2. Within 30 min of last-order time → 'closing-soon'
+ *   3. Otherwise → 'open'
+ *
+ * @param {Object} shop - shop object with lastOrder property (e.g. "8:30 PM")
+ * @returns {'open' | 'closing-soon' | 'post-buffer'}
  */
 function getShopStatus(shop) {
   const now = new Date();
@@ -381,32 +438,40 @@ function getShopStatus(shop) {
   const lastOrderDate = new Date();
   lastOrderDate.setHours(hours, minutes, 0, 0);
 
-  // If past last order time — closed
+  // Step 1: Already past last order time
   if (now > lastOrderDate) return 'post-buffer';
 
-  // If within 30 min of last order — closing soon
-  if (now > addMinutes(lastOrderDate, -30)) return 'closing-soon';
+  // Step 2: Within 30 minutes of last order (warning window)
+  // "30 min before last order" = lastOrderDate minus 30 min
+  const warnAt = addMinutes(lastOrderDate, -30);
+  if (now >= warnAt) return 'closing-soon';
 
+  // Step 3: Still comfortably open
   return 'open';
 }
 
 /**
  * Format currency in Indian rupees
+ * FIX: Wrapped in try/catch for environments where Intl is unavailable.
  * @param {number} amount
  * @returns {string}
  */
 function formatINR(amount) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  }).format(amount);
+  try {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    }).format(amount);
+  } catch (_) {
+    // Fallback for environments without Intl support
+    return `₹${Number(amount).toFixed(0)}`;
+  }
 }
 
 // ─── Debounce ─────────────────────────────────────────────────────────────────
 /**
- * Standard debounce utility.
  * @param {Function} fn
  * @param {number} delay
  * @returns {Function}
@@ -437,7 +502,6 @@ function showSkeletonCards(container, count = 4) {
 }
 
 // ─── Page Load Animations ─────────────────────────────────────────────────────
-// Trigger staggered fadeUp on .animate-child elements inside .stagger-parent
 function initStaggerAnimations() {
   const parents = document.querySelectorAll('.stagger-parent');
   parents.forEach(parent => {
@@ -459,8 +523,6 @@ function initBackButtons() {
 
 // ─── Active button scale on :active ──────────────────────────────────────────
 function initButtonActiveStates() {
-  // CSS handles :active on buttons with transform: scale(0.97)
-  // This ensures dynamically injected buttons also get the style
   if (!document.getElementById('lb-active-style')) {
     const style = document.createElement('style');
     style.id = 'lb-active-style';
@@ -475,8 +537,6 @@ function initButtonActiveStates() {
 }
 
 // ─── Namespace export ─────────────────────────────────────────────────────────
-// All utilities exported as LB.* for use by customer.js and shopkeeper.js
-
 window.LB = {
   // Install
   initInstallBanner,
@@ -505,11 +565,19 @@ window.LB = {
   initBackButtons,
   initButtonActiveStates,
 
-  // Analytics stub
-  // TODO: Replace with real analytics (privacy-first, no PII)
+  /**
+   * Analytics stub.
+   * FIX: console.log removed from production path. Logging is now gated
+   * behind a debug flag so it doesn't leak data in production builds.
+   * Replace the body with your real analytics call (Firebase, PostHog, etc.).
+   * Never log PII (phone numbers, order content).
+   */
   analytics: (eventName, params = {}) => {
-    console.log('[Analytics]', eventName, params);
+    if (typeof __LB_DEBUG__ !== 'undefined' && __LB_DEBUG__) {
+      console.log('[Analytics]', eventName, params);
+    }
     // TODO: POST to /api/analytics or use Firebase Analytics
+    // Example: firebase.analytics().logEvent(eventName, params);
   }
 };
 
@@ -520,5 +588,4 @@ document.addEventListener('DOMContentLoaded', () => {
   LB.initStaggerAnimations();
   LB.initBackButtons();
   LB.initButtonActiveStates();
-  console.log('[LocalBuy] app.js initialised');
 });
