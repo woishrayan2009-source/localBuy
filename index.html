@@ -2,476 +2,116 @@
 <html lang="en-IN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="description" content="Order from local shops in Gharmura. Walk in and collect. No delivery. No minimum.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LocalBuy — Guwahati</title>
+  
+  <link rel="manifest" href="/assets/manifest.json">
   <meta name="theme-color" content="#0f5c3a">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="LocalBuy">
-
-  <!-- Open Graph -->
-  <meta property="og:title" content="LocalBuy — Gharmura's neighbourhood shops, online">
-  <meta property="og:description" content="Order from kiranas, chemists, bakeries and more. Walk in when ready.">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://localbuy.netlify.app">
-
-  <title>LocalBuy — Buy local. Pick up fast. Gharmura.</title>
-
-  <!-- Preconnect for Google Fonts (performance) -->
+  
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-  <!-- Fonts: Fraunces (hero) + DM Sans (UI) — display=swap for performance -->
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-
-  <!-- PWA Manifest -->
-  <link rel="manifest" href="assets/manifest.json">
-  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
-
-  <!-- Critical CSS (above-fold, inlined for <1.5s FCP) -->
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,600&display=swap" rel="stylesheet">
+  
+  <!-- Critical CSS Inlined -->
   <style>
-    /* ── CRITICAL: Design tokens + above-fold layout ── */
-    :root {
-      --color-sage:       #0f5c3a;
-      --color-sage-mid:   #1a7a4e;
-      --color-sage-light: #e8f5ee;
-      --color-sage-pale:  #f0faf4;
-      --color-amber:      #d97706;
-      --color-amber-light:#fffbf0;
-      --color-surface:    #f8f7f4;
-      --color-ink:        #111827;
-      --color-muted:      #6b7280;
-      --status-open:      #16a34a;
-      --status-busy:      #d97706;
-      --status-closed:    #dc2626;
-      --color-upi:        #5f259f;
-      --color-wa:         #25d366;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--color-surface);
-      color: var(--color-ink);
-      max-width: 540px;
-      margin: 0 auto;
-      min-height: 100vh;
-      position: relative;
-      overflow-x: hidden;
-    }
-    /* Background blobs + noise texture */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background:
-        radial-gradient(ellipse 600px 400px at 80% -10%, rgba(15,92,58,0.08) 0%, transparent 70%),
-        radial-gradient(ellipse 500px 400px at -10% 100%, rgba(217,119,6,0.06) 0%, transparent 70%);
-      pointer-events: none;
-      z-index: 0;
-    }
-    body::after {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-      opacity: 0.03;
-      pointer-events: none;
-      z-index: 0;
-    }
-    main, nav, section, header, footer { position: relative; z-index: 1; }
-    /* Visually hidden utility */
-    .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-    /* Hero skeleton to avoid CLS */
-    .hero { padding: 48px 20px 32px; text-align: center; }
+    :root { --color-surface: #f8f7f4; --color-sage: #0f5c3a; --color-ink: #111827; }
+    body { background-color: var(--color-surface); margin: 0; font-family: 'DM Sans', sans-serif; color: var(--color-ink); }
+    .hero-container { max-width: 540px; margin: 0 auto; padding: 20px; }
   </style>
-
-  <!-- Deferred full CSS (non-blocking) -->
-  <link rel="stylesheet" href="main.css">
-  <link rel="stylesheet" href="animations.css">
+  
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/animations.css">
 </head>
 <body>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       INSTALL BANNER (sticky, sage green, dismissible)
-  ═══════════════════════════════════════════════════════════════════ -->
-  <div id="install-banner" class="install-banner" role="complementary" aria-label="Install LocalBuy web-app" style="display:none">
-    <div class="install-banner-left">
+  <div id="install-banner" class="install-banner" style="display: none;">
+    <div class="banner-text">
       <strong>📲 Install LocalBuy</strong>
-      <span class="install-banner-sub">Works offline · No app store</span>
+      <span>Works offline · No app store</span>
     </div>
-    <div class="install-banner-right">
-      <button id="btn-install" class="install-btn" aria-label="Install LocalBuy as an app">Install</button>
-      <button id="btn-install-dismiss" class="install-dismiss" aria-label="Dismiss install banner">✕</button>
-    </div>
+    <button id="btn-install" class="btn-outline-white">Install</button>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════════
-       NAVBAR (sticky, backdrop blur on scroll)
-  ═══════════════════════════════════════════════════════════════════ -->
-  <nav class="navbar" role="navigation" aria-label="Main navigation">
-    <a href="/" class="navbar-logo" aria-label="LocalBuy — go to homepage">
-      <!-- Hexagon SVG mark -->
-      <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M16 2L28.12 9V23L16 30L3.88 23V9L16 2Z" fill="var(--color-sage)"/>
-        <text x="16" y="21" text-anchor="middle" fill="white" font-family="DM Sans" font-weight="600" font-size="11">LB</text>
-      </svg>
-      <span class="logo-text">
-        <span class="logo-local">Local</span><span class="logo-buy">Buy</span>
-      </span>
-    </a>
-    <a href="shopkeeper.html" class="navbar-shop-link" aria-label="For shop owners">For Shops →</a>
-  </nav>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       HERO SECTION
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="hero stagger-parent" aria-labelledby="hero-heading">
-
-    <!-- Live badge -->
-    <div class="live-badge animate-child" role="status" aria-live="polite">
-      <span class="live-dot" aria-hidden="true"></span>
-      <span>Live in Gharmura · <strong>120+ shops</strong> open now</span>
+  <header class="top-nav">
+    <div class="logo">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="var(--color-sage)"><path d="M12 2L22 7.8V16.2L12 22L2 16.2V7.8L12 2Z"/></svg>
+      <span><span class="ink">Local</span><span class="sage">Buy</span></span>
     </div>
+    <a href="shopkeeper.html" class="ghost-link">For Shops &rarr;</a>
+  </header>
 
-    <!-- H1 -->
-    <h1 id="hero-heading" class="hero-heading animate-child">
-      Buy <em class="hero-em">local.</em><br>
-      Pick up <em class="hero-em">fast.</em>
-    </h1>
-
-    <!-- Subtitle -->
-    <p class="hero-subtitle animate-child">
-      Order from neighbourhood shops. Walk in when ready.<br>
-      No delivery. No minimum.
-    </p>
-
-    <!-- CTA Cards -->
-    <div class="hero-ctas animate-child" role="group" aria-label="Get started">
-      <a href="customer.html" class="cta-card cta-primary" aria-describedby="cta-customer-sub">
-        <span class="cta-title">I'm a Customer</span>
-        <span class="cta-sub" id="cta-customer-sub">Browse nearby shops &amp; order for pickup</span>
-      </a>
-      <a href="shopkeeper.html" class="cta-card cta-secondary" aria-describedby="cta-shop-sub">
-        <span class="cta-title">I'm a Shopkeeper</span>
-        <span class="cta-sub" id="cta-shop-sub">Manage your orders from the counter</span>
-      </a>
-    </div>
-
-    <!-- Stats Row -->
-    <div class="stats-row animate-child" role="list" aria-label="LocalBuy statistics">
-      <div class="stat-item" role="listitem">
-        <span class="stat-value">120+</span>
-        <span class="stat-label">Local shops</span>
+  <main class="hero-container">
+    <section class="hero stagger-animate">
+      <div class="live-badge">
+        <span class="pulse-dot"></span> Live in Guwahati · 120+ shops open now
       </div>
-      <div class="stat-divider" aria-hidden="true"></div>
-      <div class="stat-item" role="listitem">
-        <span class="stat-value">4.8★</span>
-        <span class="stat-label">Avg. rating</span>
-      </div>
-      <div class="stat-divider" aria-hidden="true"></div>
-      <div class="stat-item" role="listitem">
-        <span class="stat-value">&lt;10 min</span>
-        <span class="stat-label">Ready time</span>
-      </div>
-    </div>
-
-    <!-- Trust Pills -->
-    <div class="trust-pills animate-child" role="list" aria-label="Key features">
-      <span class="trust-pill" role="listitem">✓ Works offline</span>
-      <span class="trust-pill" role="listitem">✓ UPI &amp; Cash</span>
-      <span class="trust-pill" role="listitem">✓ SMS alerts</span>
-      <span class="trust-pill" role="listitem">✓ No data stored</span>
-      <span class="trust-pill" role="listitem">✓ No delivery charges</span>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       CATEGORIES + SHOP CARDS
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="shops-section" aria-labelledby="shops-heading">
-    <p class="section-eyebrow">Explore nearby</p>
-    <h2 id="shops-heading" class="visually-hidden">Browse shops by category</h2>
-
-    <!-- Category chips (horizontally scrollable) -->
-    <div class="category-scroll" role="group" aria-label="Filter by category">
-      <button class="category-chip active" data-category="all" aria-pressed="true">All</button>
-      <button class="category-chip" data-category="kirana" aria-pressed="false">🛒 Kirana</button>
-      <button class="category-chip" data-category="chemist" aria-pressed="false">💊 Chemist</button>
-      <button class="category-chip" data-category="stationery" aria-pressed="false">✏️ Stationery</button>
-      <button class="category-chip" data-category="bakery" aria-pressed="false">🎂 Bakery</button>
-      <button class="category-chip" data-category="dairy" aria-pressed="false">🥛 Dairy</button>
-      <button class="category-chip" data-category="beauty" aria-pressed="false">💄 Beauty</button>
-      <button class="category-chip" data-category="fish" aria-pressed="false">🐟 Fish &amp; Meat</button>
-    </div>
-
-    <!-- Shop Cards Grid -->
-    <div class="shop-grid" id="landing-shop-grid" role="list" aria-label="Nearby shops">
-      <!-- Cards injected by JS, 4 mock shops -->
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       HOW IT WORKS
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="how-section" aria-labelledby="how-heading">
-    <p class="section-eyebrow">How it works</p>
-    <h2 id="how-heading" class="section-heading">Order in seconds.<br>Collect when ready.</h2>
-
-    <div class="steps-grid" role="list">
-      <div class="step-card" role="listitem">
-        <span class="step-number" aria-hidden="true">01</span>
-        <h3 class="step-title">Find your shop</h3>
-        <p class="step-desc">Search by name, category, or item. See which shops are open right now.</p>
-      </div>
-      <div class="step-card" role="listitem">
-        <span class="step-number" aria-hidden="true">02</span>
-        <h3 class="step-title">Place your order</h3>
-        <p class="step-desc">Type your list or upload a photo of your handwritten note.</p>
-      </div>
-      <div class="step-card" role="listitem">
-        <span class="step-number" aria-hidden="true">03</span>
-        <h3 class="step-title">Get notified by SMS</h3>
-        <p class="step-desc">We text you when your order is packed and ready for collection.</p>
-      </div>
-      <div class="step-card" role="listitem">
-        <span class="step-number" aria-hidden="true">04</span>
-        <h3 class="step-title">Walk in &amp; go</h3>
-        <p class="step-desc">Show your order code at the counter. Skip the queue.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       TESTIMONIALS
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="testimonials-section" aria-labelledby="testimonials-heading">
-    <p class="section-eyebrow">What locals say</p>
-    <h2 id="testimonials-heading" class="section-heading">Trusted by Guwahati's community</h2>
-
-    <div class="testimonials-grid">
-      <blockquote class="testimonial-card">
-        <p class="testimonial-quote">
-          "I order my medicines before leaving the office. By the time I reach Pan Bazar, they're packed and waiting. It's changed my evenings."
-        </p>
-        <footer class="testimonial-footer">
-          <div class="testimonial-avatar" aria-hidden="true">PB</div>
-          <div class="testimonial-info">
-            <cite class="testimonial-name">Priyanka B.</cite>
-            <span class="testimonial-role muted">Regular customer · Ulubari</span>
-            <span class="testimonial-stars" aria-label="5 out of 5 stars">★★★★★</span>
-          </div>
-        </footer>
-      </blockquote>
-
-      <blockquote class="testimonial-card">
-        <p class="testimonial-quote">
-          "The counter rush during the evening used to be chaos. Since my regulars started ordering on LocalBuy, I can prepare in advance. It's cut the rush in half."
-        </p>
-        <footer class="testimonial-footer">
-          <div class="testimonial-avatar" aria-hidden="true">RK</div>
-          <div class="testimonial-info">
-            <cite class="testimonial-name">Rajesh Kalita</cite>
-            <span class="testimonial-role muted">Owner · Sharma General Store</span>
-            <span class="testimonial-stars" aria-label="5 out of 5 stars">★★★★★</span>
-          </div>
-        </footer>
-      </blockquote>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       MAP TEASER
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="map-section" aria-labelledby="map-heading">
-    <h2 id="map-heading" class="section-heading">120+ shops across Gharmura</h2>
-
-    <!-- Decorative CSS map frame -->
-    <div class="map-frame" role="img" aria-label="Map showing LocalBuy shops across Guwahati">
-      <!-- Pulsing map pins at varied positions -->
-      <div class="map-pin" style="top: 22%; left: 28%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-pin" style="top: 45%; left: 55%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-pin" style="top: 60%; left: 30%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-pin" style="top: 30%; left: 72%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-pin" style="top: 70%; left: 65%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-pin" style="top: 15%; left: 48%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-label-pill">📍 Gharmura</div>
-    </div>
-
-    <p class="map-neighbourhoods" aria-label="Covered neighbourhoods">
-      Fancy Bazar · Pan Bazar · Paltan Bazar · Ulubari
-    </p>
-
-    <a href="customer.html" class="map-cta-link">See all shops →</a>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       SHOPKEEPER SECTION (warm saffron)
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="shopkeeper-section" aria-labelledby="shopkeeper-heading">
-    <p class="section-eyebrow shopkeeper-eyebrow">For shop owners</p>
-    <h2 id="shopkeeper-heading" class="section-heading">Grow without a delivery fleet.</h2>
-
-    <ul class="benefits-list">
-      <li class="benefit-item">
-        <span class="benefit-icon" aria-hidden="true">🚫</span>
-        <div>
-          <strong class="benefit-title">No commission for 3 months</strong>
-          <p class="benefit-desc muted">Start earning, not paying.</p>
-        </div>
-      </li>
-      <li class="benefit-item">
-        <span class="benefit-icon" aria-hidden="true">📱</span>
-        <div>
-          <strong class="benefit-title">Works on any Android phone</strong>
-          <p class="benefit-desc muted">No new hardware needed.</p>
-        </div>
-      </li>
-      <li class="benefit-item">
-        <span class="benefit-icon" aria-hidden="true">📣</span>
-        <div>
-          <strong class="benefit-title">Free WhatsApp kit on day 1</strong>
-          <p class="benefit-desc muted">Ready-made messages for your regulars.</p>
-        </div>
-      </li>
-      <li class="benefit-item">
-        <span class="benefit-icon" aria-hidden="true">⚡</span>
-        <div>
-          <strong class="benefit-title">5-minute setup</strong>
-          <p class="benefit-desc muted">We help you go live today.</p>
-        </div>
-      </li>
-    </ul>
-
-    <div class="shopkeeper-cta-card" role="region" aria-label="Register your shop">
-      <strong class="sk-cta-title">List my shop — it's free</strong>
-      <p class="sk-cta-sub muted">Takes 5 minutes. No tech knowledge needed.</p>
-      <a href="shopkeeper.html#register" class="btn btn-primary sk-cta-btn">Get started free →</a>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       WHATSAPP SHARE
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="wa-share-section" aria-labelledby="wa-heading">
-    <div class="wa-share-card">
-      <!-- WhatsApp Logo SVG -->
-      <svg class="wa-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" width="36" height="36">
-        <circle cx="16" cy="16" r="16" fill="var(--color-wa)"/>
-        <path d="M22.5 9.5C20.8 7.8 18.5 6.8 16 6.8C10.9 6.8 6.8 10.9 6.8 16C6.8 17.7 7.3 19.4 8.1 20.8L6.8 25.2L11.3 24C12.7 24.7 14.3 25.1 16 25.1C21.1 25.1 25.2 21 25.2 15.9C25.2 13.4 24.2 11.2 22.5 9.5ZM16 23.5C14.5 23.5 13 23.1 11.8 22.4L11.5 22.2L8.7 23L9.5 20.3L9.2 20C8.4 18.7 8 17.4 8 16C8 11.6 11.6 8 16 8C18.1 8 20.1 8.8 21.5 10.2C22.9 11.6 23.8 13.7 23.8 15.9C23.8 20.3 20.4 23.5 16 23.5ZM20.3 18.1C20.1 18 19 17.5 18.8 17.4C18.6 17.3 18.5 17.3 18.4 17.5C18.3 17.7 17.9 18.2 17.8 18.4C17.7 18.5 17.6 18.5 17.4 18.4C16.3 17.9 15.5 17.5 14.7 16.3C14.5 16 14.9 16 15.2 15.4C15.3 15.3 15.3 15.2 15.2 15.1C15.1 15 14.7 13.9 14.5 13.4C14.3 12.9 14.1 13 14 13C13.9 13 13.8 13 13.6 13C13.5 13 13.2 13.1 13 13.3C12.8 13.5 12.2 14.1 12.2 15.2C12.2 16.3 13.1 17.4 13.2 17.5C13.4 17.7 14.7 19.7 16.7 20.5C18.2 21.1 18.8 21.2 19.5 21C20 20.9 21 20.4 21.2 19.8C21.5 19.2 21.5 18.7 21.4 18.6C21.4 18.3 20.5 18.2 20.3 18.1Z" fill="white"/>
-      </svg>
-      <div class="wa-share-text">
-        <h2 id="wa-heading" class="wa-heading">Share LocalBuy with friends in Guwahati</h2>
-        <p class="wa-sub muted">Word-of-mouth is how great things spread in Guwahati.</p>
-      </div>
-      <button
-        class="btn btn-wa btn-large wa-share-btn"
-        data-action="whatsapp-share"
-        aria-label="Share LocalBuy on WhatsApp"
-      >
-        Share on WhatsApp
-      </button>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       FOOTER
-  ═══════════════════════════════════════════════════════════════════ -->
-  <footer class="site-footer" role="contentinfo">
-    <div class="footer-top">
-      <div class="footer-brand">
-        <a href="/" class="footer-logo-link" aria-label="LocalBuy homepage">
-          <span class="footer-logo-local">Local</span><span class="footer-logo-buy">Buy</span>
+      
+      <h1>Buy <span class="text-sage">local</span>.<br>Pick up <span class="text-sage">fast</span>.</h1>
+      <p class="subtitle">Order from neighbourhood shops. Walk in when ready. No delivery. No minimum.</p>
+      
+      <div class="cta-stack">
+        <a href="customer.html" class="btn-primary card-cta">
+          <strong>I'm a Customer</strong>
+          <span>Browse nearby shops & order for pickup</span>
         </a>
-        <p class="footer-tagline muted">Guwahati's neighbourhood shops, online.</p>
+        <a href="shopkeeper.html" class="btn-secondary card-cta">
+          <strong>I'm a Shopkeeper</strong>
+          <span>Manage your orders from the counter</span>
+        </a>
       </div>
-      <nav class="footer-links" aria-label="Footer navigation">
-        <a href="#" class="footer-link">Privacy</a>
-        <a href="#" class="footer-link">Terms</a>
-        <a href="#" class="footer-link">Contact</a>
-      </nav>
+
+      <div class="stats-row">
+        <div class="stat"><strong>120+</strong><span>Local shops</span></div>
+        <div class="stat"><strong>4.8★</strong><span>Avg. rating</span></div>
+        <div class="stat"><strong>&lt;10 min</strong><span>Ready time</span></div>
+      </div>
+
+      <div class="trust-pills">
+        <span>✓ Works offline</span> <span>✓ UPI & Cash</span> <span>✓ SMS alerts</span> <span>✓ No data stored</span> <span>✓ No delivery charges</span>
+      </div>
+    </section>
+
+    <!-- Map Teaser -->
+    <section class="map-teaser stagger-animate">
+      <h2>120+ shops across Guwahati</h2>
+      <div class="map-frame">
+        <div class="pin" style="top: 20%; left: 30%;"></div>
+        <div class="pin" style="top: 45%; left: 60%;"></div>
+        <div class="pin" style="top: 70%; left: 40%;"></div>
+        <div class="pin" style="top: 30%; left: 80%;"></div>
+        <div class="pin" style="top: 60%; left: 15%;"></div>
+        <div class="pin" style="top: 80%; left: 75%;"></div>
+        <div class="map-label">📍 Guwahati</div>
+      </div>
+      <p class="neighborhoods">Fancy Bazar · Pan Bazar · Paltan Bazar · Ulubari</p>
+      <a href="customer.html" class="ghost-link">See all shops &rarr;</a>
+    </section>
+
+    <!-- WhatsApp Share -->
+    <section class="wa-share stagger-animate">
+      <div class="wa-card">
+        <div class="wa-header">
+          <svg width="24" height="24" fill="var(--color-wa)" viewBox="0 0 24 24"><path d="M12.031 0C5.385 0 .002 5.384.002 12.029c0 2.124.553 4.195 1.604 6.015L.031 24l6.111-1.604a11.96 11.96 0 005.889 1.53h.005c6.645 0 12.028-5.384 12.028-12.03S18.675 0 12.031 0zm0 21.936a9.98 9.98 0 01-5.086-1.385l-.365-.217-3.777.991.998-3.682-.238-.378a9.96 9.96 0 01-1.53-5.334c0-5.508 4.484-9.992 9.995-9.992 2.668 0 5.176 1.04 7.062 2.927a9.963 9.963 0 012.926 7.065c0 5.508-4.483 9.993-9.985 9.993v.012h-.005z"/></svg>
+          <strong>Share LocalBuy with friends in Guwahati</strong>
+        </div>
+        <button onclick="shareWhatsApp()" class="btn-wa">Share on WhatsApp</button>
+        <p class="sub-copy">Word-of-mouth is how great things spread in Guwahati.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-top">
+      <span class="footer-logo">Local<span style="color:#6ee7b7">Buy</span></span>
+      <div class="footer-links">
+        <a href="#">Privacy</a> &middot; <a href="#">Terms</a> &middot; <a href="#">Contact</a>
+      </div>
     </div>
-    <hr class="footer-divider" aria-hidden="true">
-    <p class="footer-bottom">
-      © 2026 LocalBuy — Made with <span class="footer-heart" aria-hidden="true">❤️</span>
-      <span class="visually-hidden">love</span> for
-      <span class="footer-city">Gharmura's local markets</span>
-    </p>
+    <div class="footer-bottom">
+      &copy; 2026 LocalBuy — Made with <span style="color:#6ee7b7">❤️</span> for Guwahati's local markets
+    </div>
   </footer>
 
-  <!-- ═══════════════════════════════════════════════════════════════
-       SCRIPTS (deferred, non-blocking)
-  ═══════════════════════════════════════════════════════════════════ -->
-  <script src="js/sw-register.js" defer></script>
-  <script src="js/app.js" defer></script>
-
-  <!-- Landing-specific inline script for category filter + shop cards -->
-  <script defer>
-    document.addEventListener('DOMContentLoaded', () => {
-      // ── Render landing shop cards ──────────────────────────────────
-      const MOCK_SHOPS = [
-        { id: 's1', name: 'Sharma General Store', category: 'kirana',  emoji: '🛒', distance: '0.3 km', ready: '8 min',  status: 'open',   area: 'Fancy Bazar' },
-        { id: 's2', name: 'City Medical Hall',     category: 'chemist', emoji: '💊', distance: '0.5 km', ready: '5 min',  status: 'busy',   area: 'Pan Bazar' },
-        { id: 's3', name: 'Maa Kamakhya Bakery',  category: 'bakery',  emoji: '🎂', distance: '0.8 km', ready: '12 min', status: 'open',   area: 'Paltan Bazar' },
-        { id: 's4', name: 'Krishna Dairy Corner', category: 'dairy',   emoji: '🥛', distance: '1.1 km', ready: '6 min',  status: 'closed', area: 'Ulubari' }
-      ];
-
-      const grid = document.getElementById('landing-shop-grid');
-      if (grid) {
-        MOCK_SHOPS.forEach(shop => {
-          const statusLabel = { open: 'Open', busy: 'Busy', closed: 'Closed' }[shop.status];
-          const card = document.createElement('a');
-          card.href = `customer.html`;
-          card.className = 'shop-card';
-          card.setAttribute('data-category', shop.category);
-          card.setAttribute('role', 'listitem');
-          card.setAttribute('aria-label', `${shop.name} — ${statusLabel}, ${shop.distance}`);
-          card.innerHTML = `
-            <div class="shop-card-icon" aria-hidden="true">${shop.emoji}</div>
-            <div class="shop-card-body">
-              <h3 class="shop-card-name">${shop.name}</h3>
-              <p class="shop-card-meta">${shop.distance} · Ready in ${shop.ready}</p>
-            </div>
-            <span class="status-badge status-${shop.status}">
-              <span class="status-dot" aria-hidden="true"></span>${statusLabel}
-            </span>
-          `;
-          grid.appendChild(card);
-        });
-      }
-
-      // ── Category chip filter (landing page) ────────────────────────
-      const chips = document.querySelectorAll('.category-chip');
-      chips.forEach(chip => {
-        chip.addEventListener('click', () => {
-          chips.forEach(c => { c.classList.remove('active'); c.setAttribute('aria-pressed', 'false'); });
-          chip.classList.add('active');
-          chip.setAttribute('aria-pressed', 'true');
-
-          const cat = chip.dataset.category;
-          const cards = grid?.querySelectorAll('.shop-card');
-          if (!cards) return;
-
-          grid.style.opacity = '0';
-          grid.style.transition = 'opacity 0.2s ease';
-          setTimeout(() => {
-            cards.forEach(card => {
-              const cardCat = card.dataset.category;
-              card.style.display = (cat === 'all' || cardCat === cat) ? '' : 'none';
-            });
-            grid.style.opacity = '1';
-          }, 200);
-        });
-      });
-
-      // ── Navbar scroll effect ───────────────────────────────────────
-      const navbar = document.querySelector('.navbar');
-      window.addEventListener('scroll', () => {
-        navbar?.classList.toggle('scrolled', window.scrollY > 20);
-      }, { passive: true });
-    });
-  </script>
-
+  <script src="/js/app.js" defer></script>
+  <script src="/js/sw-register.js" defer></script>
 </body>
 </html>
