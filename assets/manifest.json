@@ -1,0 +1,23 @@
+{
+  "name": "LocalBuy — Guwahati",
+  "short_name": "LocalBuy",
+  "description": "Buy from local shops. Walk in and collect.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f7f4",
+  "theme_color": "#0f5c3a",
+  "orientation": "portrait-primary",
+  "categories": ["shopping", "food"],
+  "lang": "en-IN",
+  "icons": [
+    { "src": "assets/icons/icon-192.png",      "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icons/icon-512.png",      "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icons/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    { "name": "Browse Shops",    "url": "/customer.html",        "icons": [] },
+    { "name": "My Orders",       "url": "/customer.html#orders", "icons": [] },
+    { "name": "Shop Dashboard",  "url": "/shopkeeper.html",      "icons": [] }
+  ]
+}

@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f5c3a" />
+  <meta name="description" content="Browse Guwahati's local shops, place your order, and walk in to collect. No delivery. No minimum." />
+  <title>Browse Shops — LocalBuy Guwahati</title>
+
+  <!-- Preconnect for Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400;1,9..144,600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="assets/manifest.json" />
+  <link rel="icon" href="assets/icons/icon-192.png" />
+
+  <!-- ─── Critical above-fold CSS (inlined, < 4KB) ─────────────────────────── -->
+  <style>
+    /* Design tokens */
+    :root {
+      --color-sage:       #0f5c3a;
+      --color-sage-mid:   #1a7a4e;
+      --color-sage-light: #e8f5ee;
+      --color-sage-pale:  #f0faf4;
+      --color-amber:      #d97706;
+      --color-amber-light:#fffbf0;
+      --color-surface:    #f8f7f4;
+      --color-ink:        #111827;
+      --color-muted:      #6b7280;
+      --status-open:      #16a34a;
+      --status-busy:      #d97706;
+      --status-closed:    #dc2626;
+      --color-upi:        #5f259f;
+      --color-wa:         #25d366;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 20px;
+      --shadow-card: 0 2px 12px rgba(15,92,58,0.08);
+      --shadow-lift: 0 8px 24px rgba(15,92,58,0.12);
+      --transition: 0.2s ease;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--color-surface);
+      color: var(--color-ink);
+      min-height: 100vh;
+      max-width: 540px;
+      margin: 0 auto;
+      position: relative;
+    }
+    /* Hide all sections by default — JS shows them */
+    [data-section] { display: none; }
+    [data-section].active { display: block; }
+    button { font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; background: none; }
+    button:active { transform: scale(0.97); transition: transform 0.1s ease; }
+    a { color: inherit; text-decoration: none; }
+    /* Focus rings — WCAG 2.1 AA */
+    :focus-visible { outline: 2px solid var(--color-sage); outline-offset: 2px; }
+    /* Tap targets */
+    button, a, [role="button"], input, select, textarea { min-height: 44px; }
+  </style>
+
+  <!-- Full stylesheet -->
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/customer.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+</head>
+
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       TOP NAVIGATION BAR — sticky, shared across all sections
+  ════════════════════════════════════════════════════════════════════════ -->
+  <header class="topbar" id="topbar" role="banner">
+    <a href="index.html" class="topbar__logo" aria-label="LocalBuy home">
+      <!-- Inline SVG hexagon mark -->
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+        <path d="M14 2L25.26 8.5V21.5L14 28L2.74 21.5V8.5L14 2Z" fill="var(--color-sage)"/>
+        <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span class="topbar__wordmark">Local<span style="color:var(--color-sage)">Buy</span></span>
+    </a>
+
+    <!-- Dynamic section title — updated by navigate() -->
+    <span class="topbar__title" id="topbar-title" aria-live="polite"></span>
+
+    <!-- Back button — shown when not on browse -->
+    <button class="topbar__back" id="btn-back" aria-label="Go back" style="display:none">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M15 18l-6-6 6-6"/>
+      </svg>
+    </button>
+  </header>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SECTION 1: BROWSE (#section-browse)
+       Shop discovery — search, filter, cards
+  ════════════════════════════════════════════════════════════════════════ -->
+  <section data-section="browse" id="section-browse" aria-label="Browse shops">
+
+    <!-- ── Search + GPS sort ─────────────────────────────────────────────── -->
+    <div class="browse__search-wrap">
+      <div class="search-bar" role="search">
+        <svg class="search-bar__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input
+          type="search"
+          id="search-input"
+          class="search-bar__input"
+          placeholder="Search shops or items…"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+          aria-label="Search shops or items"
+        />
+        <!-- Clear button -->
+        <button class="search-bar__clear" id="search-clear" aria-label="Clear search" style="display:none">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- GPS sort button -->
+      <button class="gps-btn" id="btn-gps" aria-label="Sort by my location" title="Sort by distance">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+          <path d="M12 8a4 4 0 100 8 4 4 0 000-8z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Location banner — shown if outside Guwahati bounds -->
+    <div class="location-banner" id="location-banner" role="alert" aria-live="polite" style="display:none">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+      Location not detected — showing all shops.
+    </div>
+
+    <!-- ── Category filter chips ─────────────────────────────────────────── -->
+    <nav class="chips-row" aria-label="Filter by category" role="tablist">
+      <button class="chip chip--active" data-category="all" role="tab" aria-selected="true">All</button>
+      <button class="chip" data-category="kirana" role="tab" aria-selected="false">🛒 Kirana</button>
+      <button class="chip" data-category="chemist" role="tab" aria-selected="false">💊 Chemist</button>
+      <button class="chip" data-category="stationery" role="tab" aria-selected="false">✏️ Stationery</button>
+      <button class="chip" data-category="bakery" role="tab" aria-selected="false">🎂 Bakery</button>
+      <button class="chip" data-category="dairy" role="tab" aria-selected="false">🥛 Dairy</button>
+      <button class="chip" data-category="beauty" role="tab" aria-selected="false">💄 Beauty</button>
+      <button class="chip" data-category="fish" role="tab" aria-selected="false">🐟 Fish &amp; Meat</button>
+    </nav>
+
+    <!-- ── Shop card grid ────────────────────────────────────────────────── -->
+    <main class="shop-grid" id="shop-grid" aria-label="Shop listings">
+      <!-- Cards injected by customer.js renderShopCards() -->
+
+      <!-- Skeleton shimmer cards (shown while "loading") -->
+      <div class="shop-card shop-card--skeleton" aria-hidden="true">
+        <div class="skeleton-block" style="width:48px;height:48px;border-radius:50%;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="width:80%;height:14px;margin-bottom:6px"></div>
+        <div class="skeleton-block" style="width:55%;height:12px"></div>
+      </div>
+      <div class="shop-card shop-card--skeleton" aria-hidden="true">
+        <div class="skeleton-block" style="width:48px;height:48px;border-radius:50%;margin-bottom:8px"></div>
+        <div class="skeleton-block" style="width:70%;height:14px;margin-bottom:6px"></div>
+        <div class="skeleton-block" style="width:60%;height:12px"></div>
+      </div>
+    </main>
+
+    <!-- Empty state -->
+    <div class="empty-state" id="empty-state" style="display:none" role="status">
+      <!-- Decorative inline SVG empty shelf -->
+      <svg class="empty-state__illustration" width="120" height="80" viewBox="0 0 120 80" fill="none" aria-hidden="true">
+        <rect x="10" y="60" width="100" height="6" rx="3" fill="var(--color-sage-light)"/>
+        <rect x="10" y="40" width="100" height="6" rx="3" fill="var(--color-sage-light)"/>
+        <rect x="10" y="20" width="100" height="6" rx="3" fill="var(--color-sage-light)"/>
+        <rect x="10" y="14" width="4" height="52" rx="2" fill="var(--color-sage-light)"/>
+        <rect x="106" y="14" width="4" height="52" rx="2" fill="var(--color-sage-light)"/>
+        <circle cx="60" cy="38" r="12" fill="var(--color-sage-light)"/>
+        <path d="M55 38l3 3 6-6" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p class="empty-state__title">No shops found</p>
+      <p class="empty-state__sub">Try a different category or search term.</p>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SECTION 2: SHOP WELCOME MODAL (#section-modal)
+       Full-screen bottom-sheet overlay triggered by shop card tap
+  ════════════════════════════════════════════════════════════════════════ -->
+  <div
+    class="modal-overlay"
+    id="section-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-shop-name"
+    tabindex="-1"
+    style="display:none"
+  >
+    <!-- Drag handle (mobile UX affordance) -->
+    <div class="modal__drag-handle" aria-hidden="true"></div>
+
+    <!-- Modal header -->
+    <div class="modal__header">
+      <div class="modal__shop-identity">
+        <div class="modal__emoji" id="modal-emoji" aria-hidden="true">🛒</div>
+        <div>
+          <h2 class="modal__shop-name" id="modal-shop-name">Shop Name</h2>
+          <span class="modal__category-badge" id="modal-category">Kirana</span>
+        </div>
+      </div>
+      <button class="modal__close" id="modal-close" aria-label="Close shop details">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Scrollable modal body -->
+    <div class="modal__body">
+
+      <!-- Hours block -->
+      <div class="modal__hours-block">
+        <div class="modal__hours-row">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span>Open today: <strong id="modal-hours">7:00 AM – 9:00 PM</strong></span>
+        </div>
+        <div class="modal__last-order">
+          <span class="pill pill--amber" id="modal-last-order-pill">Last order at 8:30 PM</span>
+        </div>
+      </div>
+
+      <!-- Dynamic status banner -->
+      <div class="modal__status-banner" id="modal-status-banner" role="alert" aria-live="polite"></div>
+
+      <!-- Announcement banner (shown only if shop has announcement) -->
+      <div class="modal__announcement" id="modal-announcement" style="display:none">
+        <span id="modal-announcement-text"></span>
+      </div>
+
+      <!-- Ratings block -->
+      <div class="modal__ratings">
+        <div class="modal__stars" aria-label="4.8 out of 5 stars">
+          <span class="star-filled" aria-hidden="true">★★★★★</span>
+          <strong id="modal-rating">4.8</strong>
+        </div>
+        <span class="modal__rating-count" id="modal-rating-count">23 ratings</span>
+
+        <!-- Reviews accordion -->
+        <button class="modal__reviews-toggle" id="reviews-toggle" aria-expanded="false" aria-controls="reviews-list">
+          See reviews
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="modal__reviews-list" id="reviews-list" hidden>
+          <!-- Injected by JS -->
+        </div>
+      </div>
+
+      <!-- Trust badges -->
+      <div class="modal__trust-badges" aria-label="Payment and notification options">
+        <span class="trust-badge">✓ UPI accepted</span>
+        <span class="trust-badge">✓ Cash accepted</span>
+        <span class="trust-badge">✓ SMS notification</span>
+      </div>
+
+      <!-- Distance + ready time info -->
+      <div class="modal__meta">
+        <div class="modal__meta-item">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="modal-distance">0.3 km away</span>
+        </div>
+        <div class="modal__meta-item">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span id="modal-ready-time">Ready in ~8 min</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal CTA — status-dependent, injected by JS -->
+    <div class="modal__footer" id="modal-footer">
+      <!-- JS injects CTA button here based on shop status -->
+    </div>
+  </div>
+
+  <!-- Modal backdrop -->
+  <div class="modal-backdrop" id="modal-backdrop" aria-hidden="true" style="display:none"></div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SECTION 3: ORDER INTERFACE (#section-order)
+       Customer places their order — type or photo
+  ════════════════════════════════════════════════════════════════════════ -->
+  <section data-section="order" id="section-order" aria-label="Place your order" style="padding-bottom:120px">
+
+    <!-- Shop context bar -->
+    <div class="order__shop-bar">
+      <div class="order__shop-info">
+        <span class="order__shop-emoji" id="order-shop-emoji" aria-hidden="true">🛒</span>
+        <div>
+          <p class="order__shop-name" id="order-shop-name">Sharma General Store</p>
+          <p class="order__shop-meta" id="order-shop-meta">Open · 0.3 km · Ready in ~8 min</p>
+        </div>
+      </div>
+      <button class="btn-clear-order" id="btn-clear-order" aria-label="Clear order and start over">Clear</button>
+    </div>
+
+    <!-- ── Input tabs ────────────────────────────────────────────────────── -->
+    <div class="tabs" role="tablist" aria-label="Order input method">
+      <button class="tab tab--active" id="tab-type" role="tab" aria-selected="true" aria-controls="panel-type">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Type your list
+      </button>
+      <button class="tab" id="tab-photo" role="tab" aria-selected="false" aria-controls="panel-photo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        Upload photo
+      </button>
+    </div>
+
+    <!-- Tab panel: Type list -->
+    <div class="tab-panel" id="panel-type" role="tabpanel" aria-labelledby="tab-type">
+      <div class="textarea-wrap">
+        <textarea
+          id="order-textarea"
+          class="order-textarea"
+          rows="8"
+          placeholder="Type your items here, one per line.&#10;&#10;Example:&#10;Tata Salt 1kg × 2&#10;Amul Butter 500g&#10;Maggi Noodles × 3"
+          aria-label="Type your order items"
+          maxlength="1000"
+        ></textarea>
+        <div class="textarea-meta">
+          <span class="char-count" id="char-count" aria-live="polite">0 / 1000</span>
+          <span class="textarea-tip">Tip: Add quantity for faster service</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab panel: Upload photo -->
+    <div class="tab-panel" id="panel-photo" role="tabpanel" aria-labelledby="tab-photo" hidden>
+      <div class="upload-zone" id="upload-zone" role="button" tabindex="0" aria-label="Upload photo of your list">
+        <!-- Icon -->
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage)" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+        <p class="upload-zone__title">Take a photo of your list</p>
+        <p class="upload-zone__sub">Or tap to upload from gallery</p>
+        <input
+          type="file"
+          id="photo-input"
+          accept="image/*"
+          capture="environment"
+          class="upload-zone__input"
+          aria-label="Choose or capture photo of your list"
+        />
+      </div>
+      <!-- Photo preview (hidden until file selected) -->
+      <div class="photo-preview" id="photo-preview" style="display:none">
+        <img id="photo-preview-img" alt="Your uploaded list" style="width:100%;border-radius:var(--radius-md);max-height:280px;object-fit:cover" loading="lazy" />
+        <button class="photo-preview__remove" id="btn-remove-photo" aria-label="Remove photo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          Remove
+        </button>
+        <p class="photo-note">Our shopkeeper will read and confirm your list.</p>
+      </div>
+    </div>
+
+    <!-- ── Pickup time picker ─────────────────────────────────────────────── -->
+    <div class="pickup-section">
+      <label class="section-label" for="time-slots">When will you walk in?</label>
+      <div class="time-slots" id="time-slots" role="listbox" aria-label="Select pickup time">
+        <!-- Injected by JS based on current time and shop close time -->
+      </div>
+    </div>
+
+    <!-- ── Order note ─────────────────────────────────────────────────────── -->
+    <div class="note-section">
+      <label class="section-label" for="order-note">Any special requests? <span class="optional">(optional)</span></label>
+      <textarea
+        id="order-note"
+        class="note-textarea"
+        rows="3"
+        placeholder="e.g., Please keep sugar and salt separate. / Call before closing."
+        aria-label="Special requests or notes"
+        maxlength="300"
+      ></textarea>
+    </div>
+
+    <!-- ── CTA ───────────────────────────────────────────────────────────── -->
+    <div class="order__cta">
+      <button class="btn-primary" id="btn-review-order" aria-label="Proceed to review your order">
+        Review Order →
+      </button>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SECTION 4: CHECKOUT (#section-checkout)
+       Order summary + payment selection + confirm
+  ════════════════════════════════════════════════════════════════════════ -->
+  <section data-section="checkout" id="section-checkout" aria-label="Checkout" style="padding-bottom:120px">
+
+    <!-- Order summary card -->
+    <div class="summary-card">
+      <div class="summary-card__header">
+        <span class="summary-card__emoji" id="checkout-shop-emoji" aria-hidden="true">🛒</span>
+        <div>
+          <p class="summary-card__shop" id="checkout-shop-name">Sharma General Store</p>
+          <p class="summary-card__meta" id="checkout-meta">Pickup at 2:30 PM · 3 items</p>
+        </div>
+      </div>
+
+      <!-- Order text preview -->
+      <div class="summary-card__items" id="checkout-items">
+        <!-- Text content injected by JS -->
+      </div>
+
+      <!-- Photo thumb if uploaded -->
+      <div id="checkout-photo-thumb" style="display:none">
+        <img id="checkout-photo-img" alt="Uploaded order list" style="width:80px;height:80px;object-fit:cover;border-radius:var(--radius-sm)" loading="lazy" />
+      </div>
+    </div>
+
+    <!-- Estimated total notice -->
+    <div class="info-box info-box--amber" role="note">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-amber)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+      <p>The shopkeeper will confirm the exact total and flag anything out of stock before you pay.</p>
+    </div>
+
+    <!-- ── Payment selection ──────────────────────────────────────────────── -->
+    <fieldset class="payment-fieldset">
+      <legend class="section-label">How would you like to pay?</legend>
+
+      <!-- Option A: Pay at Pickup -->
+      <label class="payment-card" id="pay-pickup-card">
+        <input type="radio" name="payment" value="pickup" id="pay-pickup" checked aria-describedby="pay-pickup-desc" />
+        <div class="payment-card__icon" aria-hidden="true">💵</div>
+        <div class="payment-card__body">
+          <p class="payment-card__title">Pay at Pickup</p>
+          <p class="payment-card__sub" id="pay-pickup-desc">Pay when you collect your order — cash or UPI</p>
+        </div>
+        <div class="payment-card__check" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+      </label>
+
+      <!-- Option B: Pay Now via UPI -->
+      <label class="payment-card" id="pay-upi-card">
+        <input type="radio" name="payment" value="upi" id="pay-upi" aria-describedby="pay-upi-desc" />
+        <div class="payment-card__icon" aria-hidden="true">
+          <!-- UPI logo inline SVG -->
+          <svg width="32" height="20" viewBox="0 0 48 28" fill="none" aria-label="UPI">
+            <rect width="48" height="28" rx="4" fill="var(--color-upi)"/>
+            <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-family="DM Sans,sans-serif" font-weight="700" font-size="11">UPI</text>
+          </svg>
+        </div>
+        <div class="payment-card__body">
+          <p class="payment-card__title">Pay Now via UPI</p>
+          <p class="payment-card__sub" id="pay-upi-desc">Secured · Instant confirmation</p>
+        </div>
+        <div class="payment-card__check" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+      </label>
+
+      <!-- UPI app chooser (shown when pay-upi selected) -->
+      <div class="upi-apps" id="upi-apps" hidden aria-label="Choose UPI app">
+        <p class="upi-apps__label">Choose your UPI app:</p>
+        <div class="upi-apps__row">
+          <button class="upi-app-btn" data-app="gpay" aria-label="Pay with Google Pay">
+            <span class="upi-app-btn__icon" aria-hidden="true">G</span>
+            GPay
+          </button>
+          <button class="upi-app-btn" data-app="phonepe" aria-label="Pay with PhonePe">
+            <span class="upi-app-btn__icon" style="background:#5f259f;color:white" aria-hidden="true">P</span>
+            PhonePe
+          </button>
+          <button class="upi-app-btn" data-app="paytm" aria-label="Pay with Paytm">
+            <span class="upi-app-btn__icon" style="background:#00baf2;color:white" aria-hidden="true">PT</span>
+            Paytm
+          </button>
+          <button class="upi-app-btn" data-app="bhim" aria-label="Pay with BHIM">
+            <span class="upi-app-btn__icon" style="background:#1a6fcc;color:white" aria-hidden="true">B</span>
+            BHIM
+          </button>
+          <button class="upi-app-btn" data-app="other" aria-label="Pay with other UPI app">
+            <span class="upi-app-btn__icon" style="background:var(--color-sage-light);color:var(--color-sage)" aria-hidden="true">↗</span>
+            Other
+          </button>
+        </div>
+
+        <!-- UPI waiting spinner (shown after deep link fires) -->
+        <div class="upi-waiting" id="upi-waiting" hidden role="status" aria-live="polite">
+          <div class="spinner" aria-hidden="true"></div>
+          <p>Waiting for payment confirmation…</p>
+          <!-- TODO: Verify payment status via backend webhook -->
+        </div>
+
+        <!-- QR fallback (shown if UPI deep link fails — desktop or unsupported app) -->
+        <div class="qr-fallback" id="qr-fallback" hidden>
+          <p class="qr-fallback__label">Scan with any UPI app</p>
+          <!-- CSS-drawn placeholder QR box -->
+          <div class="qr-placeholder" aria-label="QR code placeholder — scan with UPI app">
+            <div class="qr-inner">
+              <p class="qr-inner__text" id="qr-upi-string">upi://pay?pa=…</p>
+            </div>
+          </div>
+          <button class="btn-copy-upi" id="btn-copy-upi" aria-label="Copy UPI payment link">Copy UPI link</button>
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- Customer contact (for SMS notification) -->
+    <div class="contact-section">
+      <label class="section-label" for="customer-phone">
+        Mobile number
+        <span class="optional">(for SMS when your order is ready)</span>
+      </label>
+      <div class="phone-input-wrap">
+        <span class="phone-prefix">+91</span>
+        <input
+          type="tel"
+          id="customer-phone"
+          class="phone-input"
+          placeholder="98765 43210"
+          maxlength="10"
+          inputmode="numeric"
+          pattern="[0-9]{10}"
+          aria-label="10-digit mobile number"
+          autocomplete="tel-national"
+        />
+      </div>
+      <!-- TODO: Customer phone numbers stored only in order objects — encrypt at rest in Firebase, never log to console in production -->
+      <p class="contact-note">Only used to notify you when your order is ready. Not stored.</p>
+    </div>
+
+    <!-- Past orders re-order accordion -->
+    <div class="reorder-section" id="reorder-section" style="display:none">
+      <button class="reorder-toggle" id="reorder-toggle" aria-expanded="false" aria-controls="reorder-list">
+        Your past orders
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div id="reorder-list" class="reorder-list" hidden>
+        <!-- Injected from localStorage by JS -->
+      </div>
+    </div>
+
+    <!-- Confirm order CTA -->
+    <div class="checkout__cta">
+      <button class="btn-primary btn-confirm" id="btn-confirm-order" aria-label="Confirm and place your order">
+        Confirm Order
+      </button>
+      <p class="checkout__cta-note">You'll get an SMS when your order is ready to collect.</p>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SECTION 5: LIVE ORDER TRACKER (#section-tracker)
+       Real-time 4-stage progress tracker
+  ════════════════════════════════════════════════════════════════════════ -->
+  <section data-section="tracker" id="section-tracker" aria-label="Track your order" style="padding-bottom:120px">
+
+    <!-- Order header -->
+    <div class="tracker__header">
+      <div class="tracker__order-info">
+        <p class="tracker__order-id" id="tracker-order-id">Order #LB-8472</p>
+        <p class="tracker__shop-name" id="tracker-shop-name">Sharma General Store</p>
+      </div>
+      <div class="tracker__timer" id="tracker-timer" role="timer" aria-live="polite">
+        <!-- Countdown injected by JS -->
+      </div>
+    </div>
+
+    <!-- Order code card (shown at Packing + Ready stages) -->
+    <div class="order-code-card" id="order-code-card" style="display:none">
+      <p class="order-code-card__label">Show this code at the counter</p>
+      <p class="order-code-card__code" id="order-code" aria-label="Your order code">LB-8472</p>
+      <p class="order-code-card__sub">No receipt needed — just this code</p>
+    </div>
+
+    <!-- ── 4-stage vertical progress track ──────────────────────────────── -->
+    <ol class="progress-track" aria-label="Order status" id="progress-track">
+
+      <!-- Stage 1: Pending Review -->
+      <li class="progress-stage" data-stage="pending" id="stage-pending">
+        <div class="progress-stage__indicator" aria-hidden="true">
+          <div class="progress-stage__circle"></div>
+          <div class="progress-stage__line"></div>
+        </div>
+        <div class="progress-stage__content">
+          <p class="progress-stage__title">Pending Review</p>
+          <p class="progress-stage__desc">Your order is with the shopkeeper</p>
+          <!-- Cancel button — only in pending stage -->
+          <button class="btn-cancel-order" id="btn-cancel-order" aria-label="Cancel your order">
+            Cancel order
+          </button>
+        </div>
+      </li>
+
+      <!-- Stage 2: Quoted -->
+      <li class="progress-stage" data-stage="quoted" id="stage-quoted">
+        <div class="progress-stage__indicator" aria-hidden="true">
+          <div class="progress-stage__circle"></div>
+          <div class="progress-stage__line"></div>
+        </div>
+        <div class="progress-stage__content">
+          <p class="progress-stage__title">Quoted</p>
+          <p class="progress-stage__desc">Shopkeeper has confirmed your list</p>
+
+          <!-- Quote card (shown when shopkeeper sends quote) -->
+          <div class="quote-card" id="quote-card" style="display:none">
+            <div class="quote-card__total" id="quote-total">Total: ₹347</div>
+            <div class="quote-card__notes" id="quote-notes">
+              <!-- Notes injected by JS -->
+            </div>
+            <div class="quote-card__actions">
+              <button class="btn-accept-quote" id="btn-accept-quote" aria-label="Accept the shopkeeper's quote">
+                Accept Quote
+              </button>
+              <button class="btn-decline-quote" id="btn-decline-quote" aria-label="Decline and cancel order">
+                Cancel Order
+              </button>
+            </div>
+          </div>
+        </div>
+      </li>
+
+      <!-- Stage 3: Packing -->
+      <li class="progress-stage" data-stage="packing" id="stage-packing">
+        <div class="progress-stage__indicator" aria-hidden="true">
+          <div class="progress-stage__circle"></div>
+          <div class="progress-stage__line"></div>
+        </div>
+        <div class="progress-stage__content">
+          <p class="progress-stage__title">Packing</p>
+          <p class="progress-stage__desc">Your items are being packed</p>
+        </div>
+      </li>
+
+      <!-- Stage 4: Ready -->
+      <li class="progress-stage" data-stage="ready" id="stage-ready">
+        <div class="progress-stage__indicator" aria-hidden="true">
+          <div class="progress-stage__circle"></div>
+          <!-- No line after last stage -->
+        </div>
+        <div class="progress-stage__content">
+          <p class="progress-stage__title">Ready for Pickup 🎉</p>
+          <p class="progress-stage__desc">Walk in with your order code</p>
+        </div>
+      </li>
+    </ol>
+
+    <!-- Shop info reminder -->
+    <div class="tracker__shop-reminder" id="tracker-shop-reminder">
+      <div class="tracker__shop-reminder-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span id="tracker-shop-address">Fancy Bazar, Near Clock Tower, Guwahati</span>
+      </div>
+      <div class="tracker__shop-reminder-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <span id="tracker-shop-hours">Open until 9:00 PM</span>
+      </div>
+    </div>
+
+    <!-- Reorder link -->
+    <div class="tracker__reorder">
+      <button class="btn-link" id="btn-order-again" aria-label="Order another item from this shop">
+        + Order another item from this shop
+      </button>
+    </div>
+
+    <!-- Confetti burst (CSS-only, triggered by adding .confetti-active class) -->
+    <div class="confetti-container" id="confetti" aria-hidden="true">
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       CUSTOM MODAL COMPONENT
+       Replaces all alert() and confirm() — used for cancel confirmations etc.
+  ════════════════════════════════════════════════════════════════════════ -->
+  <div
+    class="custom-modal"
+    id="custom-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="custom-modal-title"
+    tabindex="-1"
+    style="display:none"
+  >
+    <div class="custom-modal__box">
+      <h3 class="custom-modal__title" id="custom-modal-title">Are you sure?</h3>
+      <p class="custom-modal__body" id="custom-modal-body"></p>
+      <div class="custom-modal__actions">
+        <button class="btn-modal-cancel" id="custom-modal-cancel">Cancel</button>
+        <button class="btn-modal-confirm" id="custom-modal-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+  <div class="custom-modal-backdrop" id="custom-modal-backdrop" style="display:none" aria-hidden="true"></div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       BOTTOM NAV BAR — persistent across sections
+  ════════════════════════════════════════════════════════════════════════ -->
+  <nav class="bottom-nav" aria-label="Main navigation" role="navigation">
+    <button class="bottom-nav__item bottom-nav__item--active" id="nav-browse" aria-label="Browse shops" aria-current="page">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+      <span>Shops</span>
+    </button>
+    <button class="bottom-nav__item" id="nav-orders" aria-label="My orders">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+      <span>Orders</span>
+      <!-- Badge — shown when order is active -->
+      <span class="nav-badge" id="nav-orders-badge" style="display:none" aria-label="1 active order">1</span>
+    </button>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SCRIPTS — all deferred, at bottom of body
+  ════════════════════════════════════════════════════════════════════════ -->
+
+  <!-- Shared utilities -->
+  <script src="js/i18n.js" defer></script>
+  <script src="js/geo.js" defer></script>
+  <script src="js/db-bridge.js" defer></script>
+  <script src="js/upi.js" defer></script>
+  <script src="js/notifications.js" defer></script>
+  <script src="js/app.js" defer></script>
+
+  <!-- Customer hub logic -->
+  <script src="js/customer.js" defer></script>
+
+  <!-- SW registration -->
+  <script src="js/sw-register.js" defer></script>
+
+  <!-- ───────────────────────────────────────────────────────────────────────
+       Inline bootstrap: runs after DOM ready since scripts are deferred
+  ──────────────────────────────────────────────────────────────────────── -->
+  <script>
+    // Bootstrap customer SPA after all deferred scripts load
+    document.addEventListener('DOMContentLoaded', () => {
+      // customer.js exposes window.CustomerApp.init()
+      if (window.CustomerApp && typeof window.CustomerApp.init === 'function') {
+        window.CustomerApp.init();
+      }
+    });
+  </script>
+
+</body>
+</html>

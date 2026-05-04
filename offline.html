@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f5c3a" />
+  <meta name="description" content="LocalBuy is offline — your saved orders are available." />
+  <title>You're Offline — LocalBuy Guwahati</title>
+
+  <!-- Preconnect for Google Fonts (may not load offline — fallback handled in CSS) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400;1,9..144,600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- PWA manifest (cached by SW so available offline) -->
+  <link rel="manifest" href="assets/manifest.json" />
+  <link rel="icon" href="assets/icons/icon-192.png" />
+
+  <!-- Cached stylesheets (SW caches these on install) -->
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+
+  <!-- ─── All styles inlined here as fallback if cached CSS not available ─── -->
+  <style>
+    /* ── Design tokens (duplicated from main.css as inline fallback) ─────── */
+    :root {
+      --color-sage:       #0f5c3a;
+      --color-sage-mid:   #1a7a4e;
+      --color-sage-light: #e8f5ee;
+      --color-sage-pale:  #f0faf4;
+      --color-amber:      #d97706;
+      --color-amber-light:#fffbf0;
+      --color-surface:    #f8f7f4;
+      --color-ink:        #111827;
+      --color-muted:      #6b7280;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --shadow-card: 0 2px 12px rgba(15,92,58,0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--color-surface);
+      color: var(--color-ink);
+      min-height: 100vh;
+      max-width: 540px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; }
+    button:active { transform: scale(0.97); transition: transform 0.1s ease; }
+    :focus-visible { outline: 2px solid var(--color-sage); outline-offset: 2px; }
+    button, a, [role="button"] { min-height: 44px; }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    .offline-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      background: white;
+      border-bottom: 1px solid rgba(15,92,58,0.08);
+    }
+
+    .offline-header__logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--color-ink);
+    }
+
+    .offline-header__tagline {
+      font-size: 12px;
+      color: var(--color-muted);
+      font-weight: 400;
+    }
+
+    /* ── Main content area ───────────────────────────────────────────────── */
+    .offline-main {
+      flex: 1;
+      padding: 40px 20px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    /* ── SVG signal-off icon wrapper ─────────────────────────────────────── */
+    .offline-icon-wrap {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: var(--color-sage-pale);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+      /* Subtle pulse animation */
+      animation: offlinePulse 3s ease-in-out infinite;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      @keyframes offlinePulse {
+        0%, 100% { transform: scale(1);    opacity: 1; }
+        50%       { transform: scale(1.05); opacity: 0.85; }
+      }
+    }
+
+    /* ── Typography ──────────────────────────────────────────────────────── */
+    .offline-title {
+      font-family: 'Fraunces', Georgia, serif;
+      font-style: italic;
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--color-ink);
+      line-height: 1.2;
+      margin-bottom: 12px;
+    }
+
+    .offline-sub {
+      font-size: 16px;
+      color: var(--color-muted);
+      line-height: 1.5;
+      max-width: 300px;
+      margin-bottom: 32px;
+    }
+
+    /* ── Retry button ────────────────────────────────────────────────────── */
+    .btn-retry {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--color-sage);
+      color: white;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 14px 32px;
+      border-radius: var(--radius-md);
+      min-height: 52px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.1s ease;
+      margin-bottom: 16px;
+    }
+    .btn-retry:hover { background: var(--color-sage-mid); }
+    .btn-retry:active { transform: scale(0.97); }
+
+    /* ── Subtle note ────────────────────────────────────────────────────── */
+    .offline-note {
+      font-size: 13px;
+      color: var(--color-muted);
+      max-width: 280px;
+      line-height: 1.5;
+      margin-bottom: 40px;
+    }
+
+    /* ── Saved orders section ────────────────────────────────────────────── */
+    .saved-orders-section {
+      width: 100%;
+      text-align: left;
+    }
+
+    .saved-orders-section__eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--color-sage);
+      margin-bottom: 12px;
+    }
+
+    .saved-orders-section__title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--color-ink);
+      margin-bottom: 16px;
+    }
+
+    /* Saved order card */
+    .saved-order-card {
+      background: white;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(15,92,58,0.1);
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow-card);
+    }
+
+    .saved-order-card__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .saved-order-card__id {
+      font-size: 13px;
+      font-weight: 700;
+      font-family: 'Courier New', monospace;
+      color: var(--color-sage);
+      letter-spacing: 0.05em;
+    }
+
+    .saved-order-card__status {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+
+    .saved-order-card__status--pending {
+      background: #fef3c7;
+      color: var(--color-amber);
+    }
+    .saved-order-card__status--ready {
+      background: var(--color-sage-light);
+      color: var(--color-sage);
+    }
+
+    .saved-order-card__shop {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--color-ink);
+      margin-bottom: 4px;
+    }
+
+    .saved-order-card__meta {
+      font-size: 13px;
+      color: var(--color-muted);
+      margin-bottom: 8px;
+    }
+
+    .saved-order-card__items {
+      font-size: 13px;
+      color: var(--color-ink);
+      background: var(--color-sage-pale);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 80px;
+      overflow: hidden;
+    }
+
+    .saved-order-card__sync-note {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--color-muted);
+      margin-top: 10px;
+    }
+
+    /* ── No saved orders state ───────────────────────────────────────────── */
+    .no-saved {
+      text-align: center;
+      padding: 24px 0;
+      color: var(--color-muted);
+      font-size: 14px;
+    }
+
+    /* ── Connectivity indicator strip ────────────────────────────────────── */
+    .connectivity-strip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #fef2f2;
+      border-top: 1px solid #fecaca;
+      padding: 10px 20px;
+      font-size: 13px;
+      color: #dc2626;
+    }
+
+    .connectivity-strip--online {
+      background: var(--color-sage-light);
+      border-color: rgba(22,163,74,0.2);
+      color: var(--color-sage);
+    }
+
+    /* ── Footer ─────────────────────────────────────────────────────────── */
+    .offline-footer {
+      padding: 20px;
+      text-align: center;
+      border-top: 1px solid rgba(15,92,58,0.08);
+      background: white;
+    }
+    .offline-footer p {
+      font-size: 12px;
+      color: var(--color-muted);
+      line-height: 1.5;
+    }
+    .offline-footer strong {
+      color: var(--color-sage);
+    }
+
+  </style>
+</head>
+
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       CONNECTIVITY STRIP — shown at top, updates via JS
+  ════════════════════════════════════════════════════════════════════════ -->
+  <div class="connectivity-strip" id="connectivity-strip" role="status" aria-live="polite">
+    <!-- Signal icon -->
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <line x1="1" y1="1" x2="23" y2="23"/>
+      <path d="M16.72 11.06A10.94 10.94 0 0119 12.55"/>
+      <path d="M5 12.55a10.94 10.94 0 015.17-2.39"/>
+      <path d="M10.71 5.05A16 16 0 0122.56 9"/>
+      <path d="M1.42 9a15.91 15.91 0 014.7-2.88"/>
+      <path d="M8.53 16.11a6 6 0 016.95 0"/>
+      <circle cx="12" cy="20" r="1"/>
+    </svg>
+    <span id="connectivity-text">You're offline right now</span>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       HEADER — same identity as main site
+  ════════════════════════════════════════════════════════════════════════ -->
+  <header class="offline-header" role="banner">
+    <a href="/" class="offline-header__logo" aria-label="LocalBuy home">
+      <!-- Inline SVG hexagon mark -->
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+        <path d="M14 2L25.26 8.5V21.5L14 28L2.74 21.5V8.5L14 2Z" fill="var(--color-sage)"/>
+        <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <span>Local<span style="color:var(--color-sage)">Buy</span></span>
+        <span class="offline-header__tagline">Guwahati's local shops</span>
+      </div>
+    </a>
+  </header>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       MAIN OFFLINE CONTENT
+  ════════════════════════════════════════════════════════════════════════ -->
+  <main class="offline-main" id="offline-main">
+
+    <!-- Signal-off icon — SVG wrapper (not raw emoji) -->
+    <div class="offline-icon-wrap" aria-hidden="true">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage)" stroke-width="1.5" stroke-linecap="round" aria-label="No internet connection">
+        <!-- WiFi-off style icon -->
+        <line x1="1" y1="1" x2="23" y2="23"/>
+        <path d="M16.72 11.06A10.94 10.94 0 0119 12.55"/>
+        <path d="M5 12.55a10.94 10.94 0 015.17-2.39"/>
+        <path d="M10.71 5.05A16 16 0 0122.56 9"/>
+        <path d="M1.42 9a15.91 15.91 0 014.7-2.88"/>
+        <path d="M8.53 16.11a6 6 0 016.95 0"/>
+        <circle cx="12" cy="20" r="1"/>
+      </svg>
+    </div>
+
+    <!-- Heading -->
+    <h1 class="offline-title">You're offline right now</h1>
+
+    <!-- Body text -->
+    <p class="offline-sub">
+      Your last orders are saved and will sync when you're back online.
+    </p>
+
+    <!-- Retry CTA -->
+    <button
+      class="btn-retry"
+      id="btn-retry"
+      onclick="window.location.reload()"
+      aria-label="Try reloading the page"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+        <path d="M1 4v6h6"/><path d="M23 20v-6h-6"/>
+        <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/>
+      </svg>
+      Try again
+    </button>
+
+    <!-- Subtle reassurance note -->
+    <p class="offline-note">
+      LocalBuy works best with a connection, but we've saved what matters.
+    </p>
+
+    <!-- ── Saved orders section ─────────────────────────────────────────── -->
+    <section class="saved-orders-section" aria-label="Your saved orders">
+      <p class="saved-orders-section__eyebrow">Saved locally</p>
+      <h2 class="saved-orders-section__title">Your recent orders</h2>
+
+      <!-- Order cards injected by JS from localStorage -->
+      <div id="saved-orders-list">
+        <!-- Populated by inline script below -->
+      </div>
+    </section>
+
+  </main>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       FOOTER
+  ════════════════════════════════════════════════════════════════════════ -->
+  <footer class="offline-footer" role="contentinfo">
+    <p>
+      © 2026 <strong>LocalBuy</strong> — Made with ❤️ for <strong>Guwahati's</strong> local markets
+    </p>
+  </footer>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       INLINE SCRIPT
+       All logic needed for offline.html is inlined here because external
+       scripts may fail to load when offline.
+       Reads from localStorage — no network calls.
+  ════════════════════════════════════════════════════════════════════════ -->
+  <script>
+    (function () {
+      'use strict';
+
+      // ── Render saved orders from localStorage ─────────────────────────
+
+      /**
+       * Reads the current order and past orders from localStorage
+       * and renders minimal order summary cards.
+       *
+       * localStorage keys used (lb_ namespace):
+       *   lb_currentOrder  — object: { id, shopName, shopEmoji, items, status, pickupTime, createdAt }
+       *   lb_orderHistory  — array: past order objects (same shape)
+       */
+      function renderSavedOrders() {
+        const container = document.getElementById('saved-orders-list');
+        if (!container) return;
+
+        const orders = [];
+
+        // Read current active order
+        try {
+          const raw = localStorage.getItem('lb_currentOrder');
+          if (raw) {
+            const o = JSON.parse(raw);
+            if (o && o.id) orders.push(o);
+          }
+        } catch (e) {
+          // Malformed JSON — skip silently
+        }
+
+        // Read order history (last 3)
+        try {
+          const raw = localStorage.getItem('lb_orderHistory');
+          if (raw) {
+            const history = JSON.parse(raw);
+            if (Array.isArray(history)) {
+              // Most recent first, cap at 3
+              history.slice(-3).reverse().forEach(o => {
+                // Avoid duplicate if already in orders from currentOrder
+                if (o && o.id && !orders.find(x => x.id === o.id)) {
+                  orders.push(o);
+                }
+              });
+            }
+          }
+        } catch (e) {
+          // Skip silently
+        }
+
+        if (orders.length === 0) {
+          container.innerHTML = '<p class="no-saved">No orders saved yet. Browse shops when you\'re back online.</p>';
+          return;
+        }
+
+        container.innerHTML = orders.map(order => buildOrderCard(order)).join('');
+      }
+
+      /**
+       * Build HTML string for a single saved order card.
+       * @param {Object} order
+       * @returns {string} HTML string
+       */
+      function buildOrderCard(order) {
+        const statusLabel = getStatusLabel(order.status);
+        const statusClass = order.status === 'ready' ? 'saved-order-card__status--ready' : 'saved-order-card__status--pending';
+
+        // Safely truncate items text for preview
+        const itemsPreview = order.items
+          ? String(order.items).slice(0, 120) + (String(order.items).length > 120 ? '…' : '')
+          : '—';
+
+        // Format created time
+        const timeStr = order.createdAt
+          ? new Date(order.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+          : '';
+
+        return `
+          <article class="saved-order-card" aria-label="Order ${order.id || ''}">
+            <div class="saved-order-card__header">
+              <span class="saved-order-card__id">${sanitize(order.id || 'LB-???')}</span>
+              <span class="saved-order-card__status ${statusClass}">
+                ${statusLabel}
+              </span>
+            </div>
+            <p class="saved-order-card__shop">
+              ${order.shopEmoji ? sanitize(order.shopEmoji) + ' ' : ''}${sanitize(order.shopName || 'Local Shop')}
+            </p>
+            <p class="saved-order-card__meta">
+              ${timeStr ? 'Ordered at ' + sanitize(timeStr) : ''}
+              ${order.pickupTime ? ' · Pickup: ' + sanitize(order.pickupTime) : ''}
+            </p>
+            <div class="saved-order-card__items" aria-label="Order items">
+              ${sanitize(itemsPreview)}
+            </div>
+            <p class="saved-order-card__sync-note">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M1 4v6h6"/><path d="M23 20v-6h-6"/>
+                <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/>
+              </svg>
+              Will sync when you're back online
+            </p>
+          </article>
+        `;
+      }
+
+      /**
+       * Get human-readable status label.
+       * @param {string} status
+       * @returns {string}
+       */
+      function getStatusLabel(status) {
+        const labels = {
+          'pending':  '⏳ Pending',
+          'quoted':   '📋 Quoted',
+          'packing':  '📦 Packing',
+          'ready':    '✅ Ready',
+          'complete': '✓ Complete',
+          'cancelled':'✕ Cancelled'
+        };
+        return labels[status] || '⏳ Pending';
+      }
+
+      /**
+       * Minimal XSS protection for inserting user-stored text into innerHTML.
+       * Encodes HTML special characters.
+       * @param {string} str
+       * @returns {string}
+       */
+      function sanitize(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#x27;');
+      }
+
+      // ── Connectivity detection ─────────────────────────────────────────
+
+      /**
+       * Monitors online/offline status and updates the connectivity strip.
+       * If user comes back online, shows a "Back online" message and enables
+       * the retry button with a success state.
+       */
+      function initConnectivityMonitor() {
+        const strip = document.getElementById('connectivity-strip');
+        const text  = document.getElementById('connectivity-text');
+
+        function updateStrip() {
+          if (navigator.onLine) {
+            strip.classList.add('connectivity-strip--online');
+            text.textContent = '✓ Back online! Tap "Try again" to continue.';
+          } else {
+            strip.classList.remove('connectivity-strip--online');
+            text.textContent = 'You\'re offline right now';
+          }
+        }
+
+        window.addEventListener('online',  updateStrip);
+        window.addEventListener('offline', updateStrip);
+        updateStrip(); // Run immediately on load
+      }
+
+      // ── Background sync status (from Service Worker message) ──────────
+
+      /**
+       * Listens for messages from the Service Worker about pending sync.
+       * SW sends { type: 'SYNC_QUEUED', count: N } when orders are queued.
+       */
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', event => {
+          if (event.data && event.data.type === 'SYNC_QUEUED') {
+            const count = event.data.count || 0;
+            // Optionally show a badge or note about queued orders
+            console.log('[Offline] Orders queued for sync:', count);
+          }
+        });
+      }
+
+      // ── Bootstrap ──────────────────────────────────────────────────────
+      document.addEventListener('DOMContentLoaded', () => {
+        renderSavedOrders();
+        initConnectivityMonitor();
+      });
+
+    })();
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,239 @@
+/* ============================================================
+   LocalBuy — animations.css
+   All @keyframes centralised here.
+   All animations wrapped in prefers-reduced-motion check.
+   ============================================================ */
+
+/* ── Core Keyframes ───────────────────────────────────────── */
+
+/* Staggered entrance on hero elements */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Live dot pulse (status indicator) */
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.5); }
+  50%       { box-shadow: 0 0 0 6px rgba(22,163,74,0); }
+}
+
+/* Amber pulse dot for busy status */
+@keyframes pulse-dot-amber {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217,119,6,0.5); }
+  50%       { box-shadow: 0 0 0 6px rgba(217,119,6,0); }
+}
+
+/* Map pin ping — ring expands and fades */
+@keyframes ping {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* Slide down for new order cards */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Shimmer for skeleton loading states */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Pulsing border for closing-soon CTA */
+@keyframes pulse-border {
+  0%, 100% { border-color: var(--color-sage); }
+  50%       { border-color: rgba(15,92,58,0.3); }
+}
+
+/* Pulsing border amber variant */
+@keyframes pulse-border-amber {
+  0%, 100% { border-color: var(--color-amber); box-shadow: 0 0 0 0 rgba(217,119,6,0.3); }
+  50%       { border-color: rgba(217,119,6,0.5); box-shadow: 0 0 0 6px rgba(217,119,6,0); }
+}
+
+/* Screen flash for new order alert */
+@keyframes screenFlash {
+  0%   { opacity: 0; }
+  20%  { opacity: 0.35; }
+  100% { opacity: 0; }
+}
+
+/* Confetti burst — CSS-only celebration */
+@keyframes confetti-fall-1 {
+  0%   { transform: translateY(0) rotate(0deg);   opacity: 1; }
+  100% { transform: translateY(60px) rotate(360deg); opacity: 0; }
+}
+@keyframes confetti-fall-2 {
+  0%   { transform: translateY(0) rotate(0deg) translateX(0);     opacity: 1; }
+  100% { transform: translateY(50px) rotate(-180deg) translateX(20px); opacity: 0; }
+}
+@keyframes confetti-fall-3 {
+  0%   { transform: translateY(0) rotate(45deg) translateX(0);      opacity: 1; }
+  100% { transform: translateY(55px) rotate(-90deg) translateX(-18px); opacity: 0; }
+}
+@keyframes confetti-fall-4 {
+  0%   { transform: translateY(0) rotate(10deg);   opacity: 1; }
+  100% { transform: translateY(48px) rotate(270deg); opacity: 0; }
+}
+@keyframes confetti-fall-5 {
+  0%   { transform: translateY(0) rotate(-30deg);  opacity: 1; }
+  100% { transform: translateY(52px) rotate(200deg); opacity: 0; }
+}
+
+/* Order code reveal */
+@keyframes popIn {
+  0%   { opacity: 0; transform: scale(0.88); }
+  60%  { transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Toast slide up */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(16px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Install banner slide up (dismiss) */
+@keyframes slideUpOut {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-100%); }
+}
+
+/* Spinner */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Fade in */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Shift summary entrance */
+@keyframes expandIn {
+  from { opacity: 0; transform: scale(0.95) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── Animation Utility Classes ────────────────────────────── */
+/* All wrapped in prefers-reduced-motion */
+
+@media (prefers-reduced-motion: no-preference) {
+
+  .anim-fadeUp {
+    animation: fadeUp 0.5s ease forwards;
+  }
+
+  /* Staggered hero children: add data-delay="1" through "8" */
+  [data-delay="1"] { animation-delay: 0.06s; }
+  [data-delay="2"] { animation-delay: 0.12s; }
+  [data-delay="3"] { animation-delay: 0.18s; }
+  [data-delay="4"] { animation-delay: 0.24s; }
+  [data-delay="5"] { animation-delay: 0.30s; }
+  [data-delay="6"] { animation-delay: 0.36s; }
+  [data-delay="7"] { animation-delay: 0.42s; }
+  [data-delay="8"] { animation-delay: 0.48s; }
+
+  /* Initially hidden, revealed by animation */
+  .anim-fadeUp { opacity: 0; }
+
+  .anim-slideDown {
+    animation: slideDown 0.4s ease forwards;
+  }
+
+  .anim-popIn {
+    animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  .anim-spin {
+    animation: spin 1s linear infinite;
+  }
+
+  .anim-fadeIn {
+    animation: fadeIn 0.4s ease forwards;
+  }
+
+  .anim-expandIn {
+    animation: expandIn 0.5s ease forwards;
+  }
+
+  /* Pulse-border animation for closing-soon button */
+  .pulse-border-amber {
+    animation: pulse-border-amber 1.5s ease-in-out infinite;
+  }
+
+  /* Confetti container — uses pseudo-elements */
+  .confetti-burst {
+    position: relative;
+    overflow: visible;
+  }
+
+  .confetti-burst::before,
+  .confetti-burst::after {
+    content: '🎉';
+    position: absolute;
+    font-size: 20px;
+    pointer-events: none;
+    top: -8px;
+  }
+
+  .confetti-burst::before {
+    left: 20%;
+    animation: confetti-fall-1 0.8s ease forwards;
+  }
+
+  .confetti-burst::after {
+    right: 20%;
+    animation: confetti-fall-2 0.8s ease 0.1s forwards;
+  }
+
+  /* Screen flash overlay (injected via JS) */
+  .flash-overlay {
+    position: fixed;
+    inset: 0;
+    background: #fff;
+    pointer-events: none;
+    z-index: 9999;
+    animation: screenFlash 0.3s ease forwards;
+  }
+
+  /* Skeleton loading shimmer */
+  .skeleton {
+    background: linear-gradient(90deg,
+      #e5e7eb 25%,
+      #f3f4f6 50%,
+      #e5e7eb 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Spinner component */
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(15,92,58,0.2);
+    border-top-color: var(--color-sage);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  /* New order slide-in */
+  .order-card-new {
+    animation: slideDown 0.4s ease forwards;
+  }
+
+}
+
+/* When reduced motion IS preferred — keep it static but visible */
+@media (prefers-reduced-motion: reduce) {
+  .anim-fadeUp { opacity: 1; }
+  .skeleton { background: #e5e7eb; }
+}

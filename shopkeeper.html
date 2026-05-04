@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en-IN" data-lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#d97706" />
+  <meta name="description" content="LocalBuy Shopkeeper Dashboard — manage orders from your counter." />
+  <title>Dashboard — LocalBuy Shopkeeper</title>
+
+  <!-- Preconnect for Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400;1,9..144,600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="assets/manifest.json" />
+  <link rel="icon" href="assets/icons/icon-192.png" />
+
+  <!-- ─── Critical above-fold CSS (inlined, < 4KB) ─────────────────────── -->
+  <style>
+    :root {
+      --color-sage:       #0f5c3a;
+      --color-sage-mid:   #1a7a4e;
+      --color-sage-light: #e8f5ee;
+      --color-sage-pale:  #f0faf4;
+      --color-amber:      #d97706;
+      --color-amber-light:#fffbf0;
+      --color-surface:    #f8f7f4;
+      --color-ink:        #111827;
+      --color-muted:      #6b7280;
+      --status-open:      #16a34a;
+      --status-busy:      #d97706;
+      --status-closed:    #dc2626;
+      --color-wa:         #25d366;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --shadow-card: 0 2px 12px rgba(15,92,58,0.08);
+      --shadow-amber: 0 8px 32px rgba(217,119,6,0.2);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--color-amber-light);
+      color: var(--color-ink);
+      min-height: 100vh;
+      max-width: 540px;
+      margin: 0 auto;
+    }
+    /* All sections hidden by default — JS reveals them */
+    [data-sk-section] { display: none; }
+    [data-sk-section].active { display: block; }
+    button { font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; background: none; }
+    button:active { transform: scale(0.97); transition: transform 0.1s ease; }
+    a { color: inherit; text-decoration: none; }
+    :focus-visible { outline: 2px solid var(--color-sage); outline-offset: 2px; }
+    button, a, [role="button"], input, select, textarea { min-height: 44px; }
+  </style>
+
+  <!-- Full stylesheets -->
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/shopkeeper.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+</head>
+
+<body>
+
+  <!--
+    ══════════════════════════════════════════════════════════════════════════
+    AUDIO ELEMENT — Pre-loaded for autoplay policy unlock
+    Shopkeeper taps "Start Shift" which calls .play() then .pause() on this
+    element to unlock browser audio policy before any actual orders arrive.
+    ══════════════════════════════════════════════════════════════════════════
+  -->
+  <audio id="audio-unlock" preload="auto" aria-hidden="true">
+    <!--
+      Sound files would live at assets/sounds/new-order.mp3
+      Using a data-URI stub here so the app runs without a server.
+      TODO: Replace with actual audio files at the paths below.
+    -->
+    <source src="assets/sounds/new-order.mp3" type="audio/mpeg" />
+  </audio>
+  <audio id="audio-ready" preload="auto" aria-hidden="true">
+    <source src="assets/sounds/order-ready.mp3" type="audio/mpeg" />
+  </audio>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       LANGUAGE TOGGLE — Fixed top-right, persistent across all screens
+       Drives all [data-i18n="key"] elements via i18n.js
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <div class="lang-toggle" id="lang-toggle" role="group" aria-label="Language selection">
+    <button class="lang-btn lang-btn--active" data-lang="en" aria-pressed="true">EN</button>
+    <button class="lang-btn" data-lang="hi" aria-pressed="false">हि</button>
+    <button class="lang-btn" data-lang="bn" aria-pressed="false">বা</button>
+    <button class="lang-btn" data-lang="as" aria-pressed="false">অ</button>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       SCREEN 1: SHIFT START (#shift-start)
+       Full-screen. Shopkeeper MUST start shift to access dashboard.
+       Shop is hidden from customers until shift starts.
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <div data-sk-section="shift-start" id="shift-start" class="active" aria-label="Start your shift">
+
+    <div class="shift-start__wrap">
+
+      <!-- Shop logo / brand area -->
+      <div class="shift-start__brand">
+        <!-- LocalBuy logo -->
+        <div class="shift-start__logo" aria-hidden="true">
+          <svg width="48" height="48" viewBox="0 0 28 28" fill="none">
+            <path d="M14 2L25.26 8.5V21.5L14 28L2.74 21.5V8.5L14 2Z" fill="var(--color-sage)"/>
+            <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="shift-start__app-name">LocalBuy</p>
+        <p class="shift-start__tagline" data-i18n="shift.subtitle">Shopkeeper Dashboard</p>
+      </div>
+
+      <!-- Greeting — name pulled from localStorage -->
+      <div class="shift-start__greeting">
+        <h1 class="shift-start__hello" id="sk-greeting">
+          <!-- e.g. "Good morning, Rajesh 👋" — injected by JS -->
+        </h1>
+        <p class="shift-start__date" id="sk-date"></p>
+      </div>
+
+      <!-- Shop status pill — shows OFFLINE before shift -->
+      <div class="shift-start__status-pill" aria-live="polite">
+        <span class="status-dot status-dot--red" aria-hidden="true"></span>
+        <span data-i18n="shift.offline">Offline — Shop is hidden from customers</span>
+      </div>
+
+      <!-- Shop hours reminder -->
+      <div class="shift-start__hours-card">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+        </svg>
+        <span id="sk-hours-reminder">Your shop closes at <strong>9:00 PM</strong></span>
+      </div>
+
+      <!-- Start Shift CTA -->
+      <button
+        class="btn-start-shift"
+        id="btn-start-shift"
+        aria-label="Start your shift and go online"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+          <path d="M5 3l14 9-14 9V3z"/>
+        </svg>
+        <span data-i18n="shift.start">Start Shift</span>
+      </button>
+
+      <!-- Setup link for new shopkeepers -->
+      <div class="shift-start__setup-prompt" id="shift-setup-prompt" style="display:none">
+        <p data-i18n="shift.newShop">New here? Set up your shop first.</p>
+        <a href="#section-setup" class="btn-link" data-i18n="shift.setupLink">Set up my shop →</a>
+      </div>
+
+      <!-- Footer links -->
+      <div class="shift-start__footer">
+        <a href="index.html" class="btn-link-muted" data-i18n="nav.backToHome">← Back to LocalBuy</a>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       SCREEN 2: MAIN DASHBOARD (#section-dashboard)
+       Active orders feed + stats + shift controls
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <div data-sk-section="section-dashboard" id="section-dashboard" aria-label="Active dashboard">
+
+    <!-- ── Top bar ──────────────────────────────────────────────────────── -->
+    <header class="sk-topbar" role="banner">
+      <div class="sk-topbar__left">
+        <!-- Shop name -->
+        <h1 class="sk-topbar__shop" id="sk-shop-name">Sharma General Store</h1>
+
+        <!-- Live status pill — tappable to toggle temporarily offline -->
+        <button
+          class="live-status-pill"
+          id="live-status-pill"
+          aria-label="Toggle shop online/offline status"
+          aria-pressed="true"
+        >
+          <span class="status-dot status-dot--green pulse" aria-hidden="true"></span>
+          <span class="live-status-pill__text" data-i18n="status.online">Online</span>
+        </button>
+      </div>
+
+      <div class="sk-topbar__right">
+        <!-- End shift button -->
+        <button
+          class="btn-end-shift"
+          id="btn-end-shift"
+          aria-label="End your shift"
+          data-i18n="shift.end"
+        >
+          End Shift
+        </button>
+      </div>
+    </header>
+
+    <!-- ── Stats row ────────────────────────────────────────────────────── -->
+    <div class="stats-row" aria-label="Today's stats">
+      <div class="stat-cell">
+        <p class="stat-cell__value" id="stat-orders">0</p>
+        <p class="stat-cell__label" data-i18n="stats.ordersToday">Orders today</p>
+      </div>
+      <div class="stat-cell stat-cell--mid">
+        <p class="stat-cell__value" id="stat-earnings">₹0</p>
+        <p class="stat-cell__label" data-i18n="stats.earnings">Earnings today</p>
+      </div>
+      <div class="stat-cell">
+        <p class="stat-cell__value" id="stat-avg-time">—</p>
+        <p class="stat-cell__label" data-i18n="stats.avgTime">Avg. ready time</p>
+      </div>
+    </div>
+
+    <!-- Shopkeeper alert banner (warning / info / error) -->
+    <div
+      class="sk-alert-banner"
+      id="sk-alert-banner"
+      role="alert"
+      aria-live="assertive"
+      style="display:none"
+    >
+      <svg class="sk-alert-banner__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+      </svg>
+      <span class="sk-alert-banner__text" id="sk-alert-text"></span>
+      <button class="sk-alert-banner__dismiss" id="sk-alert-dismiss" aria-label="Dismiss alert">×</button>
+    </div>
+
+    <!-- Pull-to-refresh hint -->
+    <div class="pull-hint" id="pull-hint" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+      <span data-i18n="ui.pullRefresh">Pull to refresh</span>
+    </div>
+
+    <!-- ── Active orders feed ────────────────────────────────────────────── -->
+    <section class="orders-feed" aria-label="Active orders" aria-live="polite" id="orders-feed">
+
+      <div class="orders-feed__header">
+        <h2 class="orders-feed__title" data-i18n="orders.active">Active Orders</h2>
+        <span class="orders-count-badge" id="orders-count-badge" aria-label="Number of active orders">0</span>
+      </div>
+
+      <!-- Order cards injected here by shopkeeper.js -->
+      <div class="order-cards-list" id="order-cards-list">
+        <!-- Empty state -->
+        <div class="orders-empty" id="orders-empty" role="status">
+          <div class="orders-empty__icon" aria-hidden="true">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage-light)" stroke-width="1.5" stroke-linecap="round">
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+              <rect x="9" y="3" width="6" height="4" rx="1"/>
+              <path d="M9 12h6M9 16h4"/>
+            </svg>
+          </div>
+          <p class="orders-empty__title" data-i18n="orders.emptyTitle">All clear!</p>
+          <p class="orders-empty__sub" data-i18n="orders.emptySub">No active orders right now. New orders will appear here.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Completed orders today (collapsed accordion) ─────────────────── -->
+    <section class="completed-orders" aria-label="Completed orders today">
+      <button
+        class="completed-toggle"
+        id="completed-toggle"
+        aria-expanded="false"
+        aria-controls="completed-list"
+      >
+        <span data-i18n="orders.completedToday">Completed today</span>
+        <span class="completed-count" id="completed-count">0</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div id="completed-list" class="completed-list" hidden>
+        <!-- Injected by JS -->
+      </div>
+    </section>
+
+    <!-- ── OOS (Out of Stock) quick-mark panel ──────────────────────────── -->
+    <section class="oos-panel" aria-label="Mark items as out of stock">
+      <div class="oos-panel__header">
+        <h2 class="oos-panel__title" data-i18n="oos.title">Out of Stock Today</h2>
+        <p class="oos-panel__sub" data-i18n="oos.sub">These will show automatically in your quotes</p>
+      </div>
+      <div class="oos-chips" id="oos-chips">
+        <!-- Common items as toggleable chips — JS manages state -->
+        <button class="oos-chip" data-item="tata-salt" aria-pressed="false" data-i18n="oos.tataSalt">Tata Salt</button>
+        <button class="oos-chip" data-item="amul-butter" aria-pressed="false" data-i18n="oos.amulButter">Amul Butter</button>
+        <button class="oos-chip" data-item="maggi" aria-pressed="false" data-i18n="oos.maggi">Maggi</button>
+        <button class="oos-chip" data-item="bread" aria-pressed="false" data-i18n="oos.bread">Bread</button>
+        <button class="oos-chip" data-item="eggs" aria-pressed="false" data-i18n="oos.eggs">Eggs</button>
+        <button class="oos-chip" data-item="milk" aria-pressed="false" data-i18n="oos.milk">Milk</button>
+        <button class="oos-chip" data-item="rice" aria-pressed="false" data-i18n="oos.rice">Rice</button>
+        <button class="oos-chip" data-item="atta" aria-pressed="false" data-i18n="oos.atta">Atta</button>
+      </div>
+    </section>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       ORDER ACTION PANEL — Full-screen bottom sheet
+       Opens when shopkeeper taps an order card.
+       role="dialog" with aria-modal — focus trapped when open.
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <div
+    class="order-panel"
+    id="order-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="order-panel-title"
+    tabindex="-1"
+    style="display:none"
+  >
+    <!-- Drag handle -->
+    <div class="order-panel__drag" aria-hidden="true"></div>
+
+    <!-- Panel header -->
+    <div class="order-panel__header">
+      <div class="order-panel__id-wrap">
+        <span class="order-panel__order-id" id="panel-order-id">LB-8472</span>
+        <span class="order-panel__status-badge" id="panel-status-badge" data-i18n="status.pending">Pending</span>
+      </div>
+      <button class="order-panel__close" id="order-panel-close" aria-label="Close order panel">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Scrollable panel body -->
+    <div class="order-panel__body" id="order-panel-body">
+
+      <!-- ── Customer info (read-only) ───────────────────────────────────── -->
+      <div class="panel-customer">
+        <div class="panel-customer__row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span class="panel-customer__name" id="panel-customer-name">Priyanka B.</span>
+          <span class="panel-customer__time" id="panel-order-time">12:34 PM</span>
+        </div>
+        <div class="panel-customer__row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span data-i18n="order.pickupBy">Pickup by:</span>
+          <strong id="panel-pickup-time">1:00 PM</strong>
+        </div>
+        <div class="panel-customer__row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>
+          <span class="panel-payment-method" id="panel-payment-method" data-i18n="payment.pickup">Pay at pickup</span>
+        </div>
+      </div>
+
+      <!-- ── Customer's order text (read-only) ─────────────────────────── -->
+      <div class="panel-order-text">
+        <label class="panel-label" data-i18n="order.customerList">Customer's order:</label>
+        <div class="panel-order-content" id="panel-order-content">
+          <!-- Full order text injected by JS -->
+        </div>
+      </div>
+
+      <!-- ── Photo attachment (shown if customer uploaded photo) ────────── -->
+      <div class="panel-photo" id="panel-photo" style="display:none">
+        <label class="panel-label" data-i18n="order.photoList">Photo list:</label>
+        <img
+          id="panel-photo-img"
+          alt="Customer's handwritten order list"
+          class="panel-photo__img"
+          style="touch-action: pinch-zoom"
+          loading="lazy"
+        />
+      </div>
+
+      <!-- ── Customer's note (shown if present) ─────────────────────────── -->
+      <div class="panel-note" id="panel-note" style="display:none">
+        <label class="panel-label" data-i18n="order.note">Note from customer:</label>
+        <p class="panel-note__text" id="panel-note-text"></p>
+      </div>
+
+      <div class="panel-divider" aria-hidden="true"></div>
+
+      <!-- ── Shopkeeper response section ───────────────────────────────── -->
+      <div class="panel-response">
+        <h3 class="panel-response__title" data-i18n="order.yourResponse">Your Response</h3>
+
+        <!-- Bill entry -->
+        <div class="panel-field">
+          <label class="panel-label" for="bill-amount" data-i18n="order.totalBill">Total bill amount</label>
+          <div class="input-prefix">
+            <span class="input-prefix__symbol" aria-hidden="true">₹</span>
+            <input
+              type="number"
+              id="bill-amount"
+              class="input-prefix__input"
+              inputmode="decimal"
+              placeholder="0.00"
+              min="0"
+              step="0.50"
+              aria-label="Enter total bill amount in rupees"
+            />
+          </div>
+        </div>
+
+        <!-- Substitution / OOS notes -->
+        <div class="panel-field">
+          <label class="panel-label" for="sub-notes" data-i18n="order.notes">Notes for customer <span class="optional">(optional)</span></label>
+          <textarea
+            id="sub-notes"
+            class="panel-textarea"
+            rows="4"
+            aria-label="Notes or substitutions for the customer"
+            data-i18n-placeholder="order.notesPlaceholder"
+            placeholder="e.g., No Tata Salt — added Captain Cook 1kg ✓&#10;Maggi not available today."
+          ></textarea>
+        </div>
+
+        <!-- Auto-inject OOS items (populated by OOS panel chips) -->
+        <div class="oos-auto-inject" id="oos-auto-inject" style="display:none">
+          <p class="oos-auto-inject__label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-amber)" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <span data-i18n="oos.autoInject">OOS items added to notes automatically:</span>
+          </p>
+          <p class="oos-auto-inject__items" id="oos-auto-inject-items"></p>
+        </div>
+      </div>
+
+      <!-- ── Action buttons ────────────────────────────────────────────── -->
+      <div class="panel-actions">
+
+        <!-- 1. Send Quote — amber, full width -->
+        <button
+          class="btn-send-quote"
+          id="btn-send-quote"
+          aria-label="Send bill quote to customer"
+          data-i18n="action.sendQuote"
+        >
+          Send Quote
+        </button>
+
+        <!-- 2. Mark as Packing -->
+        <button
+          class="btn-packing"
+          id="btn-packing"
+          aria-label="Mark order as being packed"
+          data-i18n="action.packing"
+        >
+          Mark as Packing
+        </button>
+
+        <!-- 3. Ready for Pickup — oversized, sage -->
+        <button
+          class="btn-ready"
+          id="btn-ready"
+          aria-label="Mark order as ready for customer pickup"
+          data-i18n="action.ready"
+        >
+          Ready for Pickup 🎉
+        </button>
+
+        <!-- 4. Cancel — small red text link -->
+        <button
+          class="btn-cancel-sk"
+          id="btn-cancel-sk"
+          aria-label="Cancel this order"
+          data-i18n="action.cancel"
+        >
+          Cancel Order
+        </button>
+      </div>
+    </div>
+
+    <!-- Confetti burst on "Ready" action (CSS-only) -->
+    <div class="confetti-container" id="sk-confetti" aria-hidden="true">
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+      <div class="confetti-piece"></div>
+    </div>
+  </div>
+
+  <!-- Order panel backdrop -->
+  <div class="order-panel-backdrop" id="order-panel-backdrop" aria-hidden="true" style="display:none"></div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       SCREEN 3: SHIFT END SUMMARY (#shift-end)
+       Shown when "End Shift" is confirmed or auto-close fires.
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <div data-sk-section="shift-end" id="shift-end" aria-label="Shift summary">
+    <div class="shift-end__wrap">
+
+      <!-- Header -->
+      <div class="shift-end__header">
+        <div class="shift-end__logo" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 28 28" fill="none">
+            <path d="M14 2L25.26 8.5V21.5L14 28L2.74 21.5V8.5L14 2Z" fill="var(--color-sage)"/>
+            <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h2 class="shift-end__title" data-i18n="shift.endTitle">Shift Complete</h2>
+        <p class="shift-end__sub" data-i18n="shift.endSub">Your shop is now offline. Great work today!</p>
+      </div>
+
+      <!-- Offline status pill -->
+      <div class="shift-end__status" role="status" aria-live="polite">
+        <span class="status-dot status-dot--red" aria-hidden="true"></span>
+        <span data-i18n="shift.offline">Offline — Shop is hidden from customers</span>
+      </div>
+
+      <!-- Summary card -->
+      <div class="summary-end-card">
+        <h3 class="summary-end-card__title" data-i18n="shift.todaySummary">Today's Summary</h3>
+
+        <div class="summary-end-card__grid">
+          <div class="summary-stat">
+            <p class="summary-stat__value" id="end-orders">0</p>
+            <p class="summary-stat__label" data-i18n="stats.ordersCompleted">Orders completed</p>
+          </div>
+          <div class="summary-stat">
+            <p class="summary-stat__value" id="end-earnings">₹0</p>
+            <p class="summary-stat__label" data-i18n="stats.totalEarnings">Total earnings</p>
+          </div>
+          <div class="summary-stat">
+            <p class="summary-stat__value" id="end-avg-time">—</p>
+            <p class="summary-stat__label" data-i18n="stats.avgFulfillment">Avg. fulfillment time</p>
+          </div>
+        </div>
+
+        <!-- Shift hours -->
+        <div class="summary-shift-hours">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span id="end-shift-hours">9:00 AM – 9:00 PM</span>
+        </div>
+      </div>
+
+      <!-- Pending orders warning (shown if any orders not resolved) -->
+      <div class="pending-warning" id="pending-warning" role="alert" style="display:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <span id="pending-warning-text">
+          <!-- e.g., "2 orders are still pending. Contact customers directly." -->
+        </span>
+      </div>
+
+      <!-- WhatsApp export button -->
+      <button
+        class="btn-wa-export"
+        id="btn-wa-export"
+        aria-label="Export summary to WhatsApp"
+        data-i18n="shift.exportWhatsApp"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" fill="var(--color-wa)"/>
+          <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2z" stroke="var(--color-wa)" stroke-width="1.5" fill="none"/>
+        </svg>
+        <span data-i18n="shift.exportWhatsApp">Export as WhatsApp message</span>
+      </button>
+
+      <!-- Start new shift -->
+      <button
+        class="btn-new-shift"
+        id="btn-new-shift"
+        aria-label="Start a new shift"
+        data-i18n="shift.startNew"
+      >
+        Start New Shift
+      </button>
+
+      <!-- Back to home -->
+      <a href="index.html" class="btn-link-muted" data-i18n="nav.backToHome">← Back to LocalBuy home</a>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       SECTION: SHOP REGISTRATION (#section-setup)
+       New shopkeeper onboarding — accessible from shift start if no profile
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <div data-sk-section="section-setup" id="section-setup" aria-label="Shop registration">
+    <div class="setup-wrap">
+      <div class="setup-header">
+        <button class="btn-icon-back" id="setup-back" aria-label="Back">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <h2 class="setup-header__title" data-i18n="setup.title">Set Up Your Shop</h2>
+      </div>
+
+      <p class="setup-intro" data-i18n="setup.intro">Takes 5 minutes. No tech knowledge needed.</p>
+
+      <form class="setup-form" id="setup-form" novalidate>
+
+        <!-- Shop name -->
+        <div class="form-field">
+          <label class="form-label" for="setup-shop-name" data-i18n="setup.shopName">Shop name</label>
+          <input
+            type="text"
+            id="setup-shop-name"
+            class="form-input"
+            autocomplete="organization"
+            required
+            aria-required="true"
+            data-i18n-placeholder="setup.shopNamePlaceholder"
+            placeholder="e.g., Sharma General Store"
+          />
+        </div>
+
+        <!-- Owner name -->
+        <div class="form-field">
+          <label class="form-label" for="setup-owner-name" data-i18n="setup.ownerName">Your name</label>
+          <input
+            type="text"
+            id="setup-owner-name"
+            class="form-input"
+            autocomplete="name"
+            required
+            aria-required="true"
+            data-i18n-placeholder="setup.ownerNamePlaceholder"
+            placeholder="e.g., Rajesh Kalita"
+          />
+        </div>
+
+        <!-- Category -->
+        <div class="form-field">
+          <label class="form-label" for="setup-category" data-i18n="setup.category">Shop category</label>
+          <select id="setup-category" class="form-select" required aria-required="true">
+            <option value="" data-i18n="setup.selectCategory">Select category…</option>
+            <option value="kirana" data-i18n="category.kirana">🛒 Kirana</option>
+            <option value="chemist" data-i18n="category.chemist">💊 Chemist</option>
+            <option value="stationery" data-i18n="category.stationery">✏️ Stationery</option>
+            <option value="bakery" data-i18n="category.bakery">🎂 Bakery</option>
+            <option value="dairy" data-i18n="category.dairy">🥛 Dairy</option>
+            <option value="beauty" data-i18n="category.beauty">💄 Beauty</option>
+            <option value="fish" data-i18n="category.fish">🐟 Fish &amp; Meat</option>
+          </select>
+        </div>
+
+        <!-- Opening hours -->
+        <div class="form-field form-field--row">
+          <div class="form-field--half">
+            <label class="form-label" for="setup-open-time" data-i18n="setup.openTime">Opens at</label>
+            <input type="time" id="setup-open-time" class="form-input" value="08:00" required aria-required="true" />
+          </div>
+          <div class="form-field--half">
+            <label class="form-label" for="setup-close-time" data-i18n="setup.closeTime">Closes at</label>
+            <input type="time" id="setup-close-time" class="form-input" value="21:00" required aria-required="true" />
+          </div>
+        </div>
+
+        <!-- Last order buffer -->
+        <div class="form-field">
+          <label class="form-label" for="setup-last-order" data-i18n="setup.lastOrder">Last order accepted (mins before close)</label>
+          <input
+            type="number"
+            id="setup-last-order"
+            class="form-input"
+            value="30"
+            min="0"
+            max="120"
+            inputmode="numeric"
+            aria-label="Minutes before closing to accept last order"
+          />
+        </div>
+
+        <!-- UPI ID -->
+        <div class="form-field">
+          <label class="form-label" for="setup-upi" data-i18n="setup.upiId">
+            UPI ID (optional)
+            <!-- TODO: UPI VPA must be resolved server-side; never expose in frontend JS in production -->
+          </label>
+          <input
+            type="text"
+            id="setup-upi"
+            class="form-input"
+            inputmode="email"
+            autocomplete="off"
+            data-i18n-placeholder="setup.upiPlaceholder"
+            placeholder="yourname@upi"
+          />
+          <p class="form-hint" data-i18n="setup.upiHint">For UPI pre-payment from customers</p>
+        </div>
+
+        <!-- Neighbourhood / area -->
+        <div class="form-field">
+          <label class="form-label" for="setup-area" data-i18n="setup.area">Neighbourhood / area</label>
+          <select id="setup-area" class="form-select">
+            <option value="" data-i18n="setup.selectArea">Select area…</option>
+            <option value="fancy-bazar">Fancy Bazar</option>
+            <option value="pan-bazar">Pan Bazar</option>
+            <option value="paltan-bazar">Paltan Bazar</option>
+            <option value="ulubari">Ulubari</option>
+            <option value="silpukhuri">Silpukhuri</option>
+            <option value="six-mile">Six Mile</option>
+            <option value="geetanagar">Geetanagar</option>
+            <option value="dispur">Dispur</option>
+            <option value="christianbasti">Christian Basti</option>
+            <option value="rehabari">Rehabari</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <!-- Phone -->
+        <div class="form-field">
+          <label class="form-label" for="setup-phone" data-i18n="setup.phone">Mobile number</label>
+          <div class="phone-input-wrap">
+            <span class="phone-prefix">+91</span>
+            <input
+              type="tel"
+              id="setup-phone"
+              class="phone-input"
+              placeholder="98765 43210"
+              maxlength="10"
+              inputmode="numeric"
+              pattern="[0-9]{10}"
+              required
+              aria-required="true"
+              autocomplete="tel-national"
+            />
+          </div>
+        </div>
+
+        <!-- Optional shop announcement -->
+        <div class="form-field">
+          <label class="form-label" for="setup-announcement" data-i18n="setup.announcement">
+            Shop announcement <span class="optional" data-i18n="optional">(optional)</span>
+          </label>
+          <input
+            type="text"
+            id="setup-announcement"
+            class="form-input"
+            maxlength="120"
+            data-i18n-placeholder="setup.announcementPlaceholder"
+            placeholder="e.g., 🎉 Fresh momo every Saturday morning!"
+          />
+        </div>
+
+        <!-- Save button -->
+        <button
+          type="button"
+          class="btn-save-setup"
+          id="btn-save-setup"
+          data-i18n="setup.save"
+          aria-label="Save shop profile"
+        >
+          Save &amp; Go Live
+        </button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       CUSTOM MODAL — Replaces all confirm() dialogs
+       Used for: end shift, cancel order, toggle offline confirmations
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <div
+    class="custom-modal"
+    id="sk-custom-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="sk-modal-title"
+    tabindex="-1"
+    style="display:none"
+  >
+    <div class="custom-modal__box">
+      <h3 class="custom-modal__title" id="sk-modal-title"></h3>
+      <p class="custom-modal__body" id="sk-modal-body"></p>
+      <div class="custom-modal__actions">
+        <button class="btn-modal-cancel" id="sk-modal-cancel" data-i18n="modal.cancel">Cancel</button>
+        <button class="btn-modal-confirm" id="sk-modal-confirm" data-i18n="modal.confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+  <div class="custom-modal-backdrop" id="sk-modal-backdrop" style="display:none" aria-hidden="true"></div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       MOCK INCOMING ORDER SIMULATOR — DEV TOOL (remove in production)
+       Simulates new order arriving while dashboard is open for testing.
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <div class="dev-toolbar" id="dev-toolbar" aria-label="Development tools">
+    <button class="dev-btn" id="dev-simulate-order" aria-label="Simulate new order (dev)">
+      + Simulate Order
+    </button>
+    <button class="dev-btn dev-btn--ghost" id="dev-hide-toolbar" aria-label="Hide developer toolbar">
+      Hide
+    </button>
+  </div>
+
+  <!-- New order flash overlay (brief white flash when new order arrives) -->
+  <div class="flash-overlay" id="flash-overlay" aria-hidden="true" style="display:none"></div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       SCRIPTS — all deferred, at end of body
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <script src="js/i18n.js" defer></script>
+  <script src="js/geo.js" defer></script>
+  <script src="js/db-bridge.js" defer></script>
+  <script src="js/notifications.js" defer></script>
+  <script src="js/app.js" defer></script>
+  <script src="js/shopkeeper.js" defer></script>
+  <script src="js/sw-register.js" defer></script>
+
+  <script>
+    // Bootstrap shopkeeper SPA after deferred scripts load
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.ShopkeeperApp && typeof window.ShopkeeperApp.init === 'function') {
+        window.ShopkeeperApp.init();
+      }
+    });
+  </script>
+
+</body>
+</html>
