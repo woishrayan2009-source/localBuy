@@ -1,910 +1,1458 @@
 /**
- * LocalBuy — shopkeeper.js
- * Full SPA logic for shopkeeper.html
+ * shopkeeper.js — LocalBuy Shopkeeper Dashboard Logic
+ * ─────────────────────────────────────────────────────────────
+ * This is the main SPA controller for shopkeeper.html.
+ * It owns:
+ *   • Registration form submission
+ *   • Shift start / end lifecycle
+ *   • Order feed (real-time listener via db-bridge.js)
+ *   • Order action panel (quote, pack, ready, cancel)
+ *   • Quick OOS inventory panel
+ *   • Auto-close guard (runs every 60s)
+ *   • Shift summary + WhatsApp export
  *
- * Sections:
- *   #shift-start     → Pre-shift screen (shown on load)
- *   #section-dashboard → Main order feed
- *   #section-order-panel → Full-screen order action panel (bottom sheet)
- *   #shift-end       → Shift summary
+ * Dependencies (loaded before this file via defer in shopkeeper.html):
+ *   • i18n.js      → window.i18n
+ *   • db-bridge.js → window.DB
+ *   • geo.js       → window.isInGuwahati, window.getUserLocation
+ *   • notifications.js → window.requestPushPermission, window.playForegroundAlert
+ *   • upi.js       → window.buildUPILink (not used here but available)
+ *   • app.js       → window.formatCurrency, window.showToast
  *
- * All UI text goes through i18n.js (window.i18n / window.t)
- * DB calls go through db-bridge.js (window.DB)
- * Shared utilities: window.LB (app.js)
+ * ALL text rendered to the DOM must go through i18n.t(key).
+ * NEVER hardcode English strings in this file.
  *
- * NEVER hardcode English text directly here. Use i18n.t('key') always.
+ * Every DB call is wrapped in a try/catch and delegates to db-bridge.js.
+ * When Firebase is ready: replace DB.* stubs with real SDK calls.
  */
 
 'use strict';
 
-// ─── Shopkeeper State ─────────────────────────────────────────────────────────
-const SK = {
-  shopId: 's1',                      // TODO: Load from auth session
-  shopName: 'Sharma General Store',  // TODO: Load from auth session
-  ownerName: 'Rajesh',               // TODO: Load from auth session
-  ownerPhone: '91XXXXXXXXXX',        // TODO: Load from authenticated user profile
-  lang: localStorage.getItem('lb_lang') || 'en',
+// ══════════════════════════════════════════════════════════════════
+//  MODULE-LEVEL STATE
+// ══════════════════════════════════════════════════════════════════
 
-  shift: {
-    active: false,
-    startTime: null,
-    ordersCompleted: 0,
-    totalEarnings: 0,
-    fulfillmentTimes: []
-  },
+/** @type {Object|null} Currently open order in the action panel */
+let activeOrder = null;
 
-  orders: [],           // Live order list
-  activeOrderId: null,  // Currently open in panel
-  oosItems: [],         // Out-of-stock items (cleared end of shift)
+/** @type {Function|null} Unsubscribe function from DB.listenOrders() */
+let orderListenerUnsubscribe = null;
 
-  shopConfig: {
-    closingHour: 21,    // 9 PM — TODO: Load from shop profile
-    closingMinute: 0
-  },
+/** @type {Map<string, Object>} In-memory order cache keyed by orderId */
+const orderCache = new Map();
 
-  unsubscribeOrders: null,  // Cleanup fn for DB listener
-  autoCloseInterval: null
+/** @type {Set<string>} Items marked OOS for this shift */
+const oosItems = new Set();
+
+/** @type {Object|null} Shift state */
+let shift = {
+  startTime:   null,
+  ordersCount: 0,
+  earnings:    0,
+  readyTimes:  [],  // array of ms durations for avg. calc
 };
 
-// ─── Mock Orders (for demo) ───────────────────────────────────────────────────
-// TODO: Replace with real-time DB listener (DB.listenOrders)
-const MOCK_ORDERS = [
-  {
-    id: 'LB-8472',
-    customerName: 'Priyanka B.',
-    createdAt: new Date(Date.now() - 12 * 60000).toISOString(),
-    pickupTime: new Date(Date.now() + 18 * 60000).toISOString(),
-    paymentMethod: 'cash',
-    status: 'pending',
-    orderText: 'Tata Salt 1kg × 2\nAmul Butter 500g\nMaggi Noodles × 3\nAashirvaad Atta 5kg',
-    uploadedPhoto: null,
-    note: 'Please keep at the counter, I\'ll arrive by 1 PM.'
-  },
-  {
-    id: 'LB-9123',
-    customerName: 'Arjun D.',
-    createdAt: new Date(Date.now() - 4 * 60000).toISOString(),
-    pickupTime: new Date(Date.now() + 40 * 60000).toISOString(),
-    paymentMethod: 'upi',
-    status: 'quoted',
-    orderText: 'Parle-G Biscuits × 4\nTata Tea Gold 250g\nDettol Soap × 3',
-    uploadedPhoto: null,
-    note: '',
-    quote: { amount: 247, notes: 'Tata Tea Gold 250g out of stock — added Wagh Bakri 250g ✓' }
-  }
-];
+/** @type {number|null} setInterval ID for auto-close guard */
+let autoCloseInterval = null;
 
-// ─── Language Setup ───────────────────────────────────────────────────────────
-function initLanguage() {
-  if (window.i18n) {
-    window.i18n.setLang(SK.lang);
-  }
+// ══════════════════════════════════════════════════════════════════
+//  DOM REFERENCES — cached after DOMContentLoaded
+// ══════════════════════════════════════════════════════════════════
+let DOM = {};
 
-  const langBtns = document.querySelectorAll('.lang-btn');
-  langBtns.forEach(btn => {
-    if (btn.dataset.lang === SK.lang) btn.classList.add('active');
-    btn.addEventListener('click', () => {
-      SK.lang = btn.dataset.lang;
-      localStorage.setItem('lb_lang', SK.lang);
-      if (window.i18n) window.i18n.setLang(SK.lang);
-      langBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      // Re-render current section
-      renderCurrentSection();
-    });
-  });
+function cacheDOM() {
+  DOM = {
+    // Registration
+    registerForm:       document.getElementById('section-register'),
+    inputShopName:      document.getElementById('input-shop-name'),
+    inputOwnerName:     document.getElementById('input-owner-name'),
+    inputCategory:      document.getElementById('input-category'),
+    inputArea:          document.getElementById('input-area'),
+    inputPhone:         document.getElementById('input-phone'),
+    inputOpenTime:      document.getElementById('input-open-time'),
+    inputCloseTime:     document.getElementById('input-close-time'),
+    inputLastOrder:     document.getElementById('input-last-order'),
+    inputUpi:           document.getElementById('input-upi'),
+    btnRegister:        document.getElementById('btn-register'),
+
+    // Shift start
+    btnStartShift:      document.getElementById('btn-start-shift'),
+    shiftStatusPill:    document.getElementById('shift-status-pill'),
+    greetingName:       document.getElementById('shift-greeting-name'),
+    shiftShopName:      document.getElementById('shift-shop-name-display'),
+    statYestOrders:     document.getElementById('stat-yesterday-orders'),
+    statYestEarnings:   document.getElementById('stat-yesterday-earnings'),
+    statYestAvgTime:    document.getElementById('stat-yesterday-avgtime'),
+
+    // Dashboard topbar
+    dashShopName:       document.getElementById('dash-shop-name'),
+    dashStatusToggle:   document.getElementById('dash-status-toggle'),
+    dashStatusLabel:    document.getElementById('dash-status-label'),
+    btnEndShift:        document.getElementById('btn-end-shift'),
+
+    // Dashboard stats
+    statOrdersToday:    document.getElementById('stat-orders-today'),
+    statEarningsToday:  document.getElementById('stat-earnings-today'),
+    statAvgReady:       document.getElementById('stat-avg-ready'),
+
+    // Tabs + panels
+    tabOrders:          document.getElementById('tab-orders'),
+    tabInventory:       document.getElementById('tab-inventory'),
+    panelOrders:        document.getElementById('panel-orders'),
+    panelInventory:     document.getElementById('panel-inventory'),
+    ordersFeed:         document.getElementById('orders-feed'),
+    ordersEmptyState:   document.getElementById('orders-empty-state'),
+    ordersCountBadge:   document.getElementById('orders-count-badge'),
+
+    // Alerts
+    shopkeeperAlert:    document.getElementById('shopkeeper-alert'),
+    flashOverlay:       document.getElementById('flash-overlay'),
+    pullHint:           document.getElementById('pull-hint'),
+
+    // OOS panel
+    oosChipsGrid:       document.getElementById('oos-chips-grid'),
+    btnClearOos:        document.getElementById('btn-clear-oos'),
+    oosCustomInput:     document.getElementById('oos-custom-input'),
+    btnOosAdd:          document.getElementById('btn-oos-add'),
+
+    // Order action panel
+    orderPanelOverlay:  document.getElementById('order-panel-overlay'),
+    panelOrderId:       document.getElementById('order-panel-title'),
+    panelCustomerMeta:  document.getElementById('panel-customer-meta'),
+    panelOrderText:     document.getElementById('panel-order-text'),
+    panelPhotoWrap:     document.getElementById('panel-photo-wrap'),
+    panelOrderPhoto:    document.getElementById('panel-order-photo'),
+    panelPaymentInfo:   document.getElementById('panel-payment-info'),
+    panelOosChips:      document.getElementById('panel-oos-chips'),
+    billAmount:         document.getElementById('bill-amount'),
+    subNotes:           document.getElementById('sub-notes'),
+    btnSendQuote:       document.getElementById('btn-send-quote'),
+    btnMarkPacking:     document.getElementById('btn-mark-packing'),
+    btnMarkReady:       document.getElementById('btn-mark-ready'),
+    btnCancelOrder:     document.getElementById('btn-cancel-order'),
+    btnClosePanel:      document.getElementById('btn-close-panel'),
+    confettiBurst:      document.getElementById('confetti-burst'),
+
+    // Shift end
+    summaryOrders:      document.getElementById('summary-orders'),
+    summaryEarnings:    document.getElementById('summary-earnings'),
+    summaryAvgTime:     document.getElementById('summary-avg-time'),
+    summaryDuration:    document.getElementById('summary-duration'),
+    pendingWarning:      document.getElementById('pending-orders-warning'),
+    pendingWarningText:  document.getElementById('pending-warning-text'),
+    btnExportWA:        document.getElementById('btn-export-wa'),
+    btnNewShift:        document.getElementById('btn-new-shift'),
+
+    // App modal
+    appModalOverlay:    document.getElementById('app-modal-overlay'),
+    appModalTitle:      document.getElementById('app-modal-title'),
+    appModalBody:       document.getElementById('app-modal-body'),
+    appModalCancel:     document.getElementById('app-modal-cancel'),
+    appModalConfirm:    document.getElementById('app-modal-confirm'),
+
+    // Audio
+    audioUnlock:        document.getElementById('audio-unlock'),
+  };
 }
 
-function t(key, params) {
-  if (window.i18n) return window.i18n.t(key, params);
-  return key; // fallback
-}
+// ══════════════════════════════════════════════════════════════════
+//  UTILITY HELPERS
+// ══════════════════════════════════════════════════════════════════
 
-// ─── Section Navigation ───────────────────────────────────────────────────────
-function skNavigate(sectionId) {
-  document.querySelectorAll('[data-sk-section]').forEach(s => {
-    s.style.display = 'none';
-    s.setAttribute('aria-hidden', 'true');
-  });
-
-  const target = document.getElementById(sectionId);
-  if (target) {
-    target.style.display = 'block';
-    target.removeAttribute('aria-hidden');
-    window.scrollTo(0, 0);
+/**
+ * t(key) — convenience alias for i18n translation.
+ * Falls back to the key itself if i18n isn't loaded yet.
+ * @param {string} key
+ * @param {Object} [vars] - interpolation variables
+ * @returns {string}
+ */
+function t(key, vars) {
+  if (window.i18n && typeof window.i18n.t === 'function') {
+    return window.i18n.t(key, vars);
   }
+  // Fallback: return key (should never happen in production)
+  return key;
 }
 
-function renderCurrentSection() {
-  if (!SK.shift.active) {
-    renderShiftStart();
-  } else {
-    renderDashboard();
-  }
+/**
+ * fmtCurrency(amount) — formats a number as ₹ Indian Rupees.
+ * Uses Intl.NumberFormat with en-IN locale.
+ * @param {number} amount
+ * @returns {string}
+ */
+function fmtCurrency(amount) {
+  try {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+  } catch(e) { return `₹${amount}`; }
 }
 
-// ─── Shift Start (#shift-start) ──────────────────────────────────────────────
-function renderShiftStart() {
-  skNavigate('shift-start');
+/**
+ * fmtTime(date) — formats a Date object as "2:34 PM".
+ * @param {Date} date
+ * @returns {string}
+ */
+function fmtTime(date) {
+  try {
+    return date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch(e) { return date.toTimeString().slice(0,5); }
+}
 
-  const el = document.getElementById('shift-start');
+/**
+ * parseTimeStr(str) — parses "08:30" → { h: 8, m: 30 }.
+ * @param {string} str - "HH:MM" 24h format
+ * @returns {{ h: number, m: number }}
+ */
+function parseTimeStr(str) {
+  const [h, m] = (str || '00:00').split(':').map(Number);
+  return { h: isNaN(h) ? 0 : h, m: isNaN(m) ? 0 : m };
+}
+
+/**
+ * getDateAtTime(timeStr) — returns a Date object for today at the given HH:MM.
+ * @param {string} timeStr
+ * @returns {Date}
+ */
+function getDateAtTime(timeStr) {
+  const { h, m } = parseTimeStr(timeStr);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+
+/**
+ * msToMins(ms) — converts milliseconds to a rounded minute string.
+ * @param {number} ms
+ * @returns {string}
+ */
+function msToMins(ms) {
+  return Math.round(ms / 60000) + ' min';
+}
+
+/**
+ * getShopConfig() — reads shop configuration from localStorage.
+ * Returns safe defaults if nothing is stored.
+ * @returns {Object}
+ */
+function getShopConfig() {
+  try {
+    return {
+      shopId:    localStorage.getItem('lb_shop_id')    || '',
+      shopName:  localStorage.getItem('lb_shop_name')  || t('shop.defaultName'),
+      ownerName: localStorage.getItem('lb_owner_name') || '',
+      openTime:  localStorage.getItem('lb_open_time')  || '08:00',
+      closeTime: localStorage.getItem('lb_close_time') || '21:00',
+      lastOrder: localStorage.getItem('lb_last_order') || '20:30',
+      phone:     localStorage.getItem('lb_phone')      || '',
+      category:  localStorage.getItem('lb_category')   || '',
+      area:      localStorage.getItem('lb_area')       || '',
+    };
+  } catch(e) { return {}; }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  CUSTOM MODAL (replaces alert() / confirm())
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * showModal({ title, body, confirmLabel, cancelLabel, onConfirm, onCancel, dangerous })
+ * Shows the app-wide custom dialog. Never use alert() or confirm() directly.
+ * @param {Object} opts
+ */
+function showModal({ title, body, confirmLabel, cancelLabel, onConfirm, onCancel, dangerous = false }) {
+  const { appModalOverlay, appModalTitle, appModalBody, appModalConfirm, appModalCancel } = DOM;
+  if (!appModalOverlay) return;
+
+  appModalTitle.textContent   = title;
+  appModalBody.textContent    = body;
+  appModalConfirm.textContent = confirmLabel || t('modal.confirm');
+  appModalCancel.textContent  = cancelLabel  || t('modal.cancel');
+
+  appModalConfirm.className = `btn modal-btn ${dangerous ? 'btn-danger' : 'btn-primary'}`;
+
+  appModalOverlay.removeAttribute('hidden');
+  appModalConfirm.focus();
+
+  // Clone buttons to remove old listeners
+  const newConfirm = appModalConfirm.cloneNode(true);
+  const newCancel  = appModalCancel.cloneNode(true);
+  appModalConfirm.parentNode.replaceChild(newConfirm, appModalConfirm);
+  appModalCancel.parentNode.replaceChild(newCancel,   appModalCancel);
+  DOM.appModalConfirm = newConfirm;
+  DOM.appModalCancel  = newCancel;
+
+  newConfirm.addEventListener('click', () => { hideModal(); if (onConfirm) onConfirm(); }, { once: true });
+  newCancel.addEventListener('click',  () => { hideModal(); if (onCancel)  onCancel();  }, { once: true });
+}
+
+/**
+ * hideModal() — closes the custom modal.
+ */
+function hideModal() {
+  if (DOM.appModalOverlay) DOM.appModalOverlay.setAttribute('hidden', '');
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  TOAST NOTIFICATIONS
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * showToast(message, type, duration)
+ * Shows a brief non-blocking toast notification.
+ * @param {string} message
+ * @param {'success'|'warn'|'error'|''} type
+ * @param {number} duration - ms before auto-dismiss (default 3000)
+ */
+function showToast(message, type = '', duration = 3000) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  toast.setAttribute('role', 'status');
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(8px)';
+    toast.style.transition = '300ms ease';
+    setTimeout(() => toast.remove(), 310);
+  }, duration);
+}
+// Expose globally for app.js compatibility
+window.showToast = showToast;
+
+// ══════════════════════════════════════════════════════════════════
+//  SHOPKEEPER ALERT BANNER (closing-soon, errors)
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * showShopkeeperAlert(type, message)
+ * Shows the in-dashboard alert banner (above order feed).
+ * @param {'warn'|'error'|'info'} type
+ * @param {string} message
+ */
+function showShopkeeperAlert(type, message) {
+  const el = DOM.shopkeeperAlert;
   if (!el) return;
-
-  const greeting = getGreeting();
-
-  el.innerHTML = `
-    <div class="shift-start-inner">
-      <div class="shift-greeting">
-        <div class="shop-logo-circle" aria-hidden="true">🛒</div>
-        <h1 class="shift-welcome" data-i18n="shift.welcome">
-          ${t('shift.welcome', { name: SK.ownerName })}
-        </h1>
-        <p class="shift-greeting-sub muted">${greeting}</p>
-      </div>
-
-      <div class="shift-status-pill offline-pill" role="status">
-        <span aria-hidden="true">🔴</span>
-        <span data-i18n="shift.offlineLabel">${t('shift.offlineLabel')}</span>
-      </div>
-
-      <p class="shift-desc muted" data-i18n="shift.offlineDesc">
-        ${t('shift.offlineDesc')}
-      </p>
-
-      <button id="btn-start-shift" class="btn btn-primary btn-large" style="width:100%; margin-top:32px" aria-label="${t('shift.startBtn')}">
-        ${t('shift.startBtn')}
-      </button>
-
-      <!-- Hidden audio for autoplay unlock -->
-      <audio id="audio-unlock" preload="auto" aria-hidden="true">
-        <!-- TODO: Replace data URI with actual MP3 file -->
-        <source src="assets/sounds/new-order.mp3" type="audio/mpeg">
-      </audio>
-    </div>
-  `;
-
-  document.getElementById('btn-start-shift')?.addEventListener('click', startShift);
+  el.className = `shopkeeper-alert ${type}`;
+  el.querySelector('.alert-text').textContent = message;
+  el.removeAttribute('hidden');
 }
 
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return t('greeting.morning');
-  if (h < 17) return t('greeting.afternoon');
-  return t('greeting.evening');
+/**
+ * hideShopkeeperAlert()
+ */
+function hideShopkeeperAlert() {
+  if (DOM.shopkeeperAlert) DOM.shopkeeperAlert.setAttribute('hidden', '');
 }
 
-function startShift() {
-  // 1. Unlock browser autoplay policy with silent audio
-  const audio = document.getElementById('audio-unlock');
-  if (audio) {
-    audio.play().then(() => {
-      audio.pause();
-      audio.currentTime = 0;
-    }).catch(e => console.warn('[SK] Audio unlock failed:', e));
+// ══════════════════════════════════════════════════════════════════
+//  REGISTRATION
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * handleRegistration()
+ * Validates the registration form and saves shop config to localStorage.
+ * On success → transitions to shift-start screen.
+ *
+ * TODO: POST form data to /api/shop/register endpoint.
+ *       UPI VPA must be sent to backend only — never stored in localStorage.
+ */
+async function handleRegistration() {
+  const { inputShopName, inputOwnerName, inputCategory, inputArea,
+          inputPhone, inputOpenTime, inputCloseTime, inputLastOrder,
+          inputUpi, btnRegister } = DOM;
+
+  // ── Validate ────────────────────────────────────────────────
+  const shopName  = inputShopName?.value.trim();
+  const ownerName = inputOwnerName?.value.trim();
+  const category  = inputCategory?.value;
+  const area      = inputArea?.value.trim();
+  const phone     = inputPhone?.value.trim();
+  const openTime  = inputOpenTime?.value;
+  const closeTime = inputCloseTime?.value;
+  const lastOrder = inputLastOrder?.value;
+
+  if (!shopName)  { showToast(t('register.error.shopName'), 'error'); inputShopName?.focus(); return; }
+  if (!ownerName) { showToast(t('register.error.ownerName'), 'error'); inputOwnerName?.focus(); return; }
+  if (!category)  { showToast(t('register.error.category'), 'error'); inputCategory?.focus(); return; }
+  if (!area)      { showToast(t('register.error.area'), 'error'); inputArea?.focus(); return; }
+  if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+    showToast(t('register.error.phone'), 'error'); inputPhone?.focus(); return;
   }
 
-  // 2. Set shift active
-  SK.shift.active = true;
-  SK.shift.startTime = new Date();
+  // ── Loading state ────────────────────────────────────────────
+  if (btnRegister) { btnRegister.disabled = true; btnRegister.textContent = t('register.saving'); }
 
-  // 3. Update shop status online
-  window.DB.setShopStatus(SK.shopId, 'online');
+  try {
+    // TODO: POST to /api/shop/register — include UPI VPA in POST body, NOT localStorage
+    // const res = await fetch('/api/shop/register', { method: 'POST', body: JSON.stringify({...}) });
+    // const { shopId } = await res.json();
+    // For now: generate a local stub shop ID
+    const shopId = 'SHOP-' + Date.now();
 
-  // 4. Start auto-close guard
+    // Persist shop config (NEVER persist UPI VPA to localStorage)
+    localStorage.setItem('lb_shop_id',    shopId);
+    localStorage.setItem('lb_shop_name',  shopName);
+    localStorage.setItem('lb_owner_name', ownerName);
+    localStorage.setItem('lb_category',   category);
+    localStorage.setItem('lb_area',       area);
+    localStorage.setItem('lb_phone',      phone);
+    localStorage.setItem('lb_open_time',  openTime  || '08:00');
+    localStorage.setItem('lb_close_time', closeTime || '21:00');
+    localStorage.setItem('lb_last_order', lastOrder || '20:30');
+    // lb_shift_ended = false on fresh registration
+    localStorage.removeItem('lb_shift_ended');
+    localStorage.removeItem('lb_shift_active');
+
+    // TODO: Replace with DB.createShop() call when Firebase is ready
+    if (window.DB) {
+      DB.logEvent('shop_registered', { category, area });
+    }
+
+    showToast(t('register.success'), 'success');
+    populateShiftStartScreen();
+    window.showScreen('shift-start');
+
+  } catch(err) {
+    console.error('[Register] Error:', err);
+    showToast(t('register.error.generic'), 'error');
+  } finally {
+    if (btnRegister) { btnRegister.disabled = false; btnRegister.textContent = t('register.submit'); }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SHIFT START / END
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * populateShiftStartScreen()
+ * Fills in shop name, owner greeting, hours, and yesterday's stats
+ * on the shift-start screen from localStorage.
+ */
+function populateShiftStartScreen() {
+  const cfg = getShopConfig();
+
+  if (DOM.shiftShopName)  DOM.shiftShopName.textContent  = cfg.shopName;
+  if (DOM.dashShopName)   DOM.dashShopName.textContent   = cfg.shopName;
+  if (DOM.greetingName) {
+    const hour = new Date().getHours();
+    const greetKey = hour < 12 ? 'greeting.morning' : hour < 17 ? 'greeting.afternoon' : 'greeting.evening';
+    DOM.greetingName.textContent = `${t(greetKey)}, ${cfg.ownerName} 👋`;
+  }
+
+  // Hours reminder
+  const hoursEl = document.getElementById('shift-hours-display');
+  if (hoursEl && cfg.openTime && cfg.closeTime) {
+    const fmt = s => {
+      const { h, m } = parseTimeStr(s);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      return `${h % 12 || 12}:${m.toString().padStart(2,'0')} ${ampm}`;
+    };
+    hoursEl.textContent = `${t('shift.hoursLabel')}: ${fmt(cfg.openTime)} – ${fmt(cfg.closeTime)}`;
+  }
+
+  // Yesterday's stats from localStorage
+  try {
+    const prev = JSON.parse(localStorage.getItem('lb_prev_shift') || '{}');
+    if (DOM.statYestOrders)   DOM.statYestOrders.textContent   = prev.orders   ?? '—';
+    if (DOM.statYestEarnings) DOM.statYestEarnings.textContent = prev.earnings  ? fmtCurrency(prev.earnings) : '—';
+    if (DOM.statYestAvgTime)  DOM.statYestAvgTime.textContent  = prev.avgTime   ? prev.avgTime + ' min' : '—';
+  } catch(e) {}
+}
+
+/**
+ * startShift()
+ * Called when the shopkeeper taps "Start Shift".
+ * 1. Unlocks browser audio autoplay
+ * 2. Marks shift active in localStorage
+ * 3. Sets shop online via DB
+ * 4. Starts auto-close guard
+ * 5. Attaches order listener
+ * 6. Navigates to dashboard
+ */
+async function startShift() {
+  // 1. Unlock audio autoplay (browser requires a user gesture first)
+  unlockAudio();
+
+  // 2. Record shift start time
+  shift.startTime   = new Date();
+  shift.ordersCount = 0;
+  shift.earnings    = 0;
+  shift.readyTimes  = [];
+
+  try {
+    localStorage.setItem('lb_shift_active', 'true');
+    localStorage.setItem('lb_shift_start',  shift.startTime.toISOString());
+    localStorage.removeItem('lb_shift_ended');
+  } catch(e) {}
+
+  // 3. Set shop online
+  const cfg = getShopConfig();
+  try {
+    // TODO: Replace with firebase.firestore().doc('shops/'+cfg.shopId).update({status:'online'})
+    DB.setShopStatus(cfg.shopId, 'online');
+    DB.logEvent('shift_started', { shopId: cfg.shopId });
+  } catch(e) { console.warn('[DB] setShopStatus failed', e); }
+
+  // 4. Update dashboard UI
+  updateDashboardStatus(true);
+  updateStatsDisplay();
+
+  // 5. Start auto-close guard
   startAutoCloseGuard();
 
-  // 5. Navigate to dashboard
-  renderDashboard();
-  startOrderListener();
+  // 6. Start listening for orders
+  startOrderListener(cfg.shopId);
 
-  LB.analytics('shift_started', { shopId: SK.shopId });
+  // 7. Navigate
+  window.showScreen('dashboard');
+
+  // 8. Restore OOS items from localStorage
+  restoreOosItems();
 }
 
-// ─── Dashboard (#section-dashboard) ──────────────────────────────────────────
-function renderDashboard() {
-  skNavigate('section-dashboard');
-
-  const el = document.getElementById('section-dashboard');
-  if (!el) return;
-
-  el.innerHTML = `
-    <div class="sk-topbar">
-      <div class="sk-shop-info">
-        <span class="sk-shop-name">${SK.shopName}</span>
-        <button class="status-toggle online" id="btn-status-toggle" aria-pressed="true" aria-label="${t('dashboard.goOffline')}">
-          <span class="live-dot" aria-hidden="true"></span>
-          <span data-i18n="dashboard.online">${t('dashboard.online')}</span>
-        </button>
-      </div>
-      <button class="btn btn-danger-outline btn-sm" id="btn-end-shift">
-        ${t('dashboard.endShift')}
-      </button>
-    </div>
-
-    <div class="sk-stats-row" aria-label="${t('dashboard.statsLabel')}">
-      <div class="sk-stat">
-        <span class="sk-stat-value" id="stat-orders">${SK.shift.ordersCompleted}</span>
-        <span class="sk-stat-label muted" data-i18n="dashboard.ordersToday">${t('dashboard.ordersToday')}</span>
-      </div>
-      <div class="sk-stat">
-        <span class="sk-stat-value" id="stat-earnings">${LB.formatINR(SK.shift.totalEarnings)}</span>
-        <span class="sk-stat-label muted" data-i18n="dashboard.earningsToday">${t('dashboard.earningsToday')}</span>
-      </div>
-      <div class="sk-stat">
-        <span class="sk-stat-value" id="stat-ready-time">
-          ${SK.shift.fulfillmentTimes.length
-            ? Math.round(SK.shift.fulfillmentTimes.reduce((a,b) => a+b, 0) / SK.shift.fulfillmentTimes.length) + ' min'
-            : '—'}
-        </span>
-        <span class="sk-stat-label muted" data-i18n="dashboard.avgReadyTime">${t('dashboard.avgReadyTime')}</span>
-      </div>
-    </div>
-
-    <div class="sk-orders-header">
-      <h2 class="sk-section-title" data-i18n="dashboard.activeOrders">${t('dashboard.activeOrders')}</h2>
-      <span class="sk-order-count" id="order-count-badge" aria-live="polite">${SK.orders.length}</span>
-    </div>
-
-    <div id="orders-feed" class="orders-feed" role="list" aria-label="${t('dashboard.activeOrders')}">
-      ${SK.orders.length === 0 ? renderEmptyFeed() : ''}
-    </div>
-
-    <!-- Audio element (unlocked in startShift) -->
-    <audio id="audio-unlock" preload="auto" aria-hidden="true">
-      <source src="assets/sounds/new-order.mp3" type="audio/mpeg">
-    </audio>
-  `;
-
-  // Render existing mock orders
-  SK.orders = [...MOCK_ORDERS];
-  SK.orders.forEach(order => appendOrderCard(order, false));
-
-  // Wire buttons
-  document.getElementById('btn-status-toggle')?.addEventListener('click', toggleShopStatus);
-  document.getElementById('btn-end-shift')?.addEventListener('click', promptEndShift);
+/**
+ * unlockAudio()
+ * Plays then immediately pauses the audio element to satisfy Chrome's
+ * autoplay policy. Must be called within a user gesture handler.
+ */
+function unlockAudio() {
+  const audio = DOM.audioUnlock;
+  if (!audio) return;
+  audio.play()
+    .then(() => { audio.pause(); audio.currentTime = 0; })
+    .catch(e => console.warn('[Audio] Unlock failed — user hasn\'t interacted?', e));
 }
 
-function renderEmptyFeed() {
-  return `
-    <div class="empty-feed" role="status">
-      <span class="empty-feed-icon" aria-hidden="true">⏳</span>
-      <p class="empty-feed-title" data-i18n="dashboard.noOrders">${t('dashboard.noOrders')}</p>
-      <p class="muted" data-i18n="dashboard.noOrdersDesc">${t('dashboard.noOrdersDesc')}</p>
-    </div>
-  `;
-}
+/**
+ * endShift()
+ * Tears down the shift:
+ * 1. Stops auto-close guard
+ * 2. Stops order listener
+ * 3. Sets shop offline
+ * 4. Saves shift stats for "yesterday"
+ * 5. Shows summary screen
+ * @param {boolean} [auto=false] — true if triggered by auto-close timer
+ */
+async function endShift(auto = false) {
+  // Stop guards
+  if (autoCloseInterval) { clearInterval(autoCloseInterval); autoCloseInterval = null; }
+  if (orderListenerUnsubscribe) { orderListenerUnsubscribe(); orderListenerUnsubscribe = null; }
 
-// ─── Order Cards ──────────────────────────────────────────────────────────────
-function appendOrderCard(order, animate = true) {
-  const feed = document.getElementById('orders-feed');
-  if (!feed) return;
+  // Set shop offline
+  const cfg = getShopConfig();
+  try {
+    // TODO: Replace with Firebase doc update
+    DB.setShopStatus(cfg.shopId, 'offline');
+    DB.logEvent('shift_ended', { shopId: cfg.shopId, ordersCount: shift.ordersCount, auto });
+  } catch(e) {}
 
-  // Remove empty state if present
-  const emptyState = feed.querySelector('.empty-feed');
-  if (emptyState) emptyState.remove();
+  // Calculate duration
+  const durationMs = shift.startTime ? (Date.now() - shift.startTime.getTime()) : 0;
+  const durationStr = `${Math.floor(durationMs / 3600000)}h ${Math.floor((durationMs % 3600000) / 60000)}m`;
 
-  const card = createOrderCard(order);
-  if (animate) {
-    card.style.animation = 'slideDown 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards';
-    feed.prepend(card);
-  } else {
-    feed.appendChild(card);
+  // Avg. ready time
+  const avgReady = shift.readyTimes.length
+    ? Math.round(shift.readyTimes.reduce((a,b)=>a+b,0) / shift.readyTimes.length / 60000)
+    : 0;
+
+  // Save to localStorage for "yesterday"
+  try {
+    localStorage.setItem('lb_prev_shift', JSON.stringify({
+      orders:   shift.ordersCount,
+      earnings: shift.earnings,
+      avgTime:  avgReady,
+    }));
+    localStorage.setItem('lb_shift_active', 'false');
+    localStorage.setItem('lb_shift_ended',  'true');
+    localStorage.removeItem('lb_shift_start');
+  } catch(e) {}
+
+  // Populate summary screen
+  if (DOM.summaryOrders)   DOM.summaryOrders.textContent   = shift.ordersCount;
+  if (DOM.summaryEarnings) DOM.summaryEarnings.textContent = fmtCurrency(shift.earnings);
+  if (DOM.summaryAvgTime)  DOM.summaryAvgTime.textContent  = avgReady ? avgReady + ' min' : t('summary.na');
+  if (DOM.summaryDuration) DOM.summaryDuration.textContent = durationStr;
+
+  // Check for pending orders
+  const pendingCount = Array.from(orderCache.values()).filter(o => o.status !== 'ready' && o.status !== 'cancelled').length;
+  if (pendingCount > 0 && DOM.pendingWarning) {
+    DOM.pendingWarning.removeAttribute('hidden');
+    if (DOM.pendingWarningText) {
+      DOM.pendingWarningText.textContent = t('shiftEnd.pendingWarning', { count: pendingCount });
+    }
   }
 
-  updateOrderCount();
+  window.showScreen('shift-end');
 }
 
-function createOrderCard(order) {
-  const card = document.createElement('div');
-  card.className = `order-card urgency-${getUrgencyLevel(order)}`;
-  card.setAttribute('data-order-id', order.id);
-  card.setAttribute('role', 'listitem');
-  card.setAttribute('tabindex', '0');
-  card.setAttribute('aria-label', `Order ${order.id} from ${order.customerName}, ${getStatusLabel(order.status)}`);
+// ══════════════════════════════════════════════════════════════════
+//  AUTO-CLOSE GUARD
+// ══════════════════════════════════════════════════════════════════
 
-  const createdAt = new Date(order.createdAt);
-  const pickupAt  = new Date(order.pickupTime);
-  const timeAgo   = getTimeAgo(createdAt);
-  const pickupStr = LB.formatTime(pickupAt);
-
-  const payLabel = order.paymentMethod === 'upi' ? t('order.payUPI') : t('order.payCash');
-
-  card.innerHTML = `
-    <div class="order-card-top">
-      <div class="order-id-customer">
-        <span class="order-id" aria-label="Order ${order.id}">${order.id}</span>
-        <span class="order-separator" aria-hidden="true">·</span>
-        <span class="order-customer">${order.customerName}</span>
-      </div>
-      <span class="order-time muted">${timeAgo}</span>
-    </div>
-    <div class="order-card-meta">
-      <span class="order-payment-badge">${payLabel}</span>
-      <span class="order-pickup-time">
-        ${t('order.readyBy')} ${pickupStr}
-      </span>
-    </div>
-    <p class="order-preview-text">"${truncate(order.orderText, 80)}"</p>
-    <div class="order-card-footer">
-      <span class="order-status-label status-${order.status}">${getStatusLabel(order.status)}</span>
-      <button class="btn-text-sage order-manage-btn">
-        ${t('order.tapToManage')} →
-      </button>
-    </div>
-  `;
-
-  function openPanel() { openOrderPanel(order.id); }
-  card.addEventListener('click', openPanel);
-  card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openPanel(); });
-
-  return card;
+/**
+ * startAutoCloseGuard()
+ * Runs every 60 seconds. Warns shopkeeper 15 min before close.
+ * Auto-ends shift at closing time.
+ *
+ * TODO: If shift.startTime + closeTime cross midnight, handle gracefully.
+ */
+function startAutoCloseGuard() {
+  autoCloseInterval = setInterval(checkAutoClose, 60_000);
 }
 
-function getUrgencyLevel(order) {
-  const pickupAt = new Date(order.pickupTime);
+function checkAutoClose() {
+  const cfg = getShopConfig();
   const now = new Date();
-  const createdAt = new Date(order.createdAt);
-  const minutesToPickup = (pickupAt - now) / 60000;
-  const minutesSinceCreated = (now - createdAt) / 60000;
+  const closingTime = getDateAtTime(cfg.closeTime);
+  const warningTime = new Date(closingTime.getTime() - 15 * 60 * 1000); // 15 min before
 
-  if (minutesToPickup < 10 || (minutesSinceCreated > 20 && order.status === 'pending')) return 'red';
-  if (minutesToPickup < 30 || minutesSinceCreated > 10) return 'amber';
-  return 'green';
-}
-
-function getStatusLabel(status) {
-  const labels = {
-    pending: t('status.pending'),
-    quoted:  t('status.quoted'),
-    packing: t('status.packing'),
-    ready:   t('status.ready'),
-    cancelled: t('status.cancelled'),
-    completed: t('status.completed')
-  };
-  return labels[status] || status;
-}
-
-function getTimeAgo(date) {
-  const diff = Math.floor((Date.now() - date) / 60000);
-  if (diff < 1) return t('time.justNow');
-  if (diff < 60) return `${diff} ${t('time.minAgo')}`;
-  return LB.formatTime(date);
-}
-
-function truncate(str, len) {
-  if (!str) return '';
-  return str.length > len ? str.slice(0, len) + '…' : str;
-}
-
-function updateOrderCount() {
-  const badge = document.getElementById('order-count-badge');
-  if (badge) badge.textContent = SK.orders.length;
-}
-
-// ─── Incoming Order Alert ─────────────────────────────────────────────────────
-// Called by DB listener when a new order arrives
-function onNewOrderReceived(order) {
-  SK.orders.unshift(order);
-  appendOrderCard(order, true);
-
-  // 1. Play audio
-  if (window.playForegroundAlert) window.playForegroundAlert('new-order');
-
-  // 2. Vibrate
-  if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
-
-  // 3. Flash screen
-  flashScreen();
-
-  // 4. Show toast
-  LB.toast(`${t('alert.newOrder')} — ${order.customerName}`, 'success');
-
-  // 5. Web Push if page not focused
-  if (document.hidden && window.showPushNotification) {
-    window.showPushNotification({
-      title: t('notification.newOrder.title'),
-      body: t('notification.newOrder.body'),
-      tag: 'new-order-' + order.id,
-      actionUrl: '/shopkeeper.html'
-    });
-  }
-
-  LB.analytics('new_order_received', { orderId: order.id, shopId: SK.shopId });
-}
-
-function flashScreen() {
-  const flash = document.createElement('div');
-  flash.style.cssText = `
-    position: fixed; inset: 0; background: white; opacity: 0.7;
-    pointer-events: none; z-index: 9990;
-    animation: flashFade 0.3s ease forwards;
-  `;
-  flash.setAttribute('aria-hidden', 'true');
-  document.body.appendChild(flash);
-  setTimeout(() => flash.remove(), 350);
-
-  if (!document.getElementById('lb-flash-style')) {
-    const style = document.createElement('style');
-    style.id = 'lb-flash-style';
-    style.textContent = `
-      @keyframes flashFade { from { opacity: 0.7; } to { opacity: 0; } }
-      @media (prefers-reduced-motion: reduce) { @keyframes flashFade { from { opacity: 0; } to { opacity: 0; } } }
-    `;
-    document.head.appendChild(style);
-  }
-}
-
-// ─── Order Action Panel (full-screen bottom sheet) ────────────────────────────
-function openOrderPanel(orderId) {
-  const order = SK.orders.find(o => o.id === orderId);
-  if (!order) return;
-  SK.activeOrderId = orderId;
-
-  const panel = document.getElementById('order-panel');
-  if (!panel) return;
-
-  panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-modal', 'true');
-  panel.setAttribute('aria-labelledby', 'panel-order-id');
-
-  panel.innerHTML = `
-    <div class="panel-header">
-      <div>
-        <h2 id="panel-order-id" class="panel-title">${order.id}</h2>
-        <p class="panel-customer muted">${order.customerName} · ${getTimeAgo(new Date(order.createdAt))}</p>
-      </div>
-      <button class="modal-close" id="btn-close-panel" aria-label="${t('panel.close')}">✕</button>
-    </div>
-
-    <div class="panel-order-info">
-      <div class="panel-pickup-time">
-        <span class="panel-meta-label" data-i18n="panel.pickupBy">${t('panel.pickupBy')}</span>
-        <strong>${LB.formatTime(new Date(order.pickupTime))}</strong>
-      </div>
-      ${order.note ? `<div class="panel-customer-note"><span>📝</span> ${order.note}</div>` : ''}
-    </div>
-
-    <div class="panel-order-text">
-      <label class="panel-section-label" data-i18n="panel.customerOrder">${t('panel.customerOrder')}</label>
-      <pre class="panel-order-pre">${order.orderText || ''}</pre>
-    </div>
-
-    ${order.uploadedPhoto ? `
-      <div class="panel-photo">
-        <label class="panel-section-label">${t('panel.customerPhoto')}</label>
-        <img src="${order.uploadedPhoto}" alt="Customer's handwritten order" style="width:100%; border-radius:12px; touch-action:pinch-zoom; max-height:280px; object-fit:contain;" loading="lazy">
-      </div>
-    ` : ''}
-
-    <div class="panel-response">
-      <label class="panel-section-label" for="bill-amount" data-i18n="panel.totalBill">${t('panel.totalBill')}</label>
-      <div class="input-prefix">
-        <span aria-hidden="true">₹</span>
-        <input
-          type="number"
-          id="bill-amount"
-          inputmode="decimal"
-          placeholder="0.00"
-          min="0"
-          step="0.50"
-          value="${order.quote?.amount || ''}"
-          aria-label="${t('panel.totalBill')}"
-        >
-      </div>
-
-      <label class="panel-section-label" for="sub-notes" data-i18n="panel.notesLabel" style="margin-top:16px">${t('panel.notesLabel')}</label>
-      <textarea
-        id="sub-notes"
-        class="panel-notes-textarea"
-        placeholder="${t('panel.notesPlaceholder')}"
-        rows="3"
-        aria-label="${t('panel.notesLabel')}"
-      >${order.quote?.notes || ''}</textarea>
-
-      <div class="oos-section">
-        <label class="panel-section-label" data-i18n="panel.oosLabel">${t('panel.oosLabel')}</label>
-        <div class="oos-chips" role="group" aria-label="${t('panel.oosLabel')}">
-          ${['Tata Salt', 'Amul Butter', 'Maggi', 'Dettol', 'Parle-G', 'Surf Excel'].map(item => `
-            <button
-              class="oos-chip ${SK.oosItems.includes(item) ? 'oos-active' : ''}"
-              data-item="${item}"
-              aria-pressed="${SK.oosItems.includes(item)}"
-              title="${t('panel.markOOS')}: ${item}"
-            >${item}</button>
-          `).join('')}
-        </div>
-      </div>
-    </div>
-
-    <div class="panel-actions">
-      <button class="btn btn-amber btn-large" id="btn-send-quote" style="width:100%">
-        ${t('panel.sendQuote')}
-      </button>
-      <button class="btn btn-outline btn-large" id="btn-mark-packing" style="width:100%">
-        ${t('panel.markPacking')}
-      </button>
-      <button class="btn btn-primary btn-xl" id="btn-mark-ready" style="width:100%">
-        ${t('panel.markReady')} 🎉
-      </button>
-      <button class="btn-text-danger" id="btn-cancel-panel-order">
-        ${t('panel.cancelOrder')}
-      </button>
-    </div>
-  `;
-
-  panel.style.display = 'block';
-  requestAnimationFrame(() => panel.classList.add('open'));
-
-  // Wire close button
-  document.getElementById('btn-close-panel')?.addEventListener('click', closeOrderPanel);
-  panel.addEventListener('click', e => { if (e.target === panel) closeOrderPanel(); });
-
-  // OOS chips
-  panel.querySelectorAll('.oos-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const item = chip.dataset.item;
-      const idx = SK.oosItems.indexOf(item);
-      if (idx === -1) {
-        SK.oosItems.push(item);
-        chip.classList.add('oos-active');
-        chip.setAttribute('aria-pressed', 'true');
-        // Append to notes
-        const notes = document.getElementById('sub-notes');
-        if (notes) notes.value += (notes.value ? '\n' : '') + `${item} — out of stock today`;
-      } else {
-        SK.oosItems.splice(idx, 1);
-        chip.classList.remove('oos-active');
-        chip.setAttribute('aria-pressed', 'false');
-      }
-    });
-  });
-
-  // Action buttons
-  document.getElementById('btn-send-quote')?.addEventListener('click', () => sendQuote(order));
-  document.getElementById('btn-mark-packing')?.addEventListener('click', () => markPacking(order));
-  document.getElementById('btn-mark-ready')?.addEventListener('click', () => markReady(order));
-  document.getElementById('btn-cancel-panel-order')?.addEventListener('click', () => cancelOrder(order));
-
-  LB.analytics('order_panel_open', { orderId });
-}
-
-function closeOrderPanel() {
-  const panel = document.getElementById('order-panel');
-  if (!panel) return;
-  panel.classList.remove('open');
-  setTimeout(() => { panel.style.display = 'none'; panel.innerHTML = ''; }, 300);
-  SK.activeOrderId = null;
-}
-
-// ─── Order Actions ────────────────────────────────────────────────────────────
-
-function sendQuote(order) {
-  const amount = parseFloat(document.getElementById('bill-amount')?.value || '0');
-  const notes  = document.getElementById('sub-notes')?.value || '';
-
-  if (!amount || amount <= 0) {
-    LB.toast(t('panel.amountRequired'), 'warn');
+  if (now >= closingTime) {
+    // Auto-end shift
+    endShift(true);
     return;
   }
 
-  order.status = 'quoted';
-  order.quote = { amount, notes };
-
-  window.DB.updateOrderStatus(order.id, 'quoted', { amount, notes });
-  window.DB.notifyCustomerQuoted(order.id, amount, notes);
-
-  updateOrderCardStatus(order.id, 'quoted');
-  LB.toast(`${t('panel.quoteSent')} — ₹${amount}`, 'success');
-  closeOrderPanel();
-  LB.analytics('quote_sent', { orderId: order.id, amount });
-}
-
-function markPacking(order) {
-  order.status = 'packing';
-  window.DB.updateOrderStatus(order.id, 'packing', {});
-  updateOrderCardStatus(order.id, 'packing');
-  LB.toast(t('panel.packingStarted'), 'info');
-  closeOrderPanel();
-  LB.analytics('order_packing', { orderId: order.id });
-}
-
-function markReady(order) {
-  order.status = 'ready';
-
-  // Record fulfillment time
-  const startedAt = new Date(order.createdAt);
-  const fulfillmentMin = Math.round((Date.now() - startedAt) / 60000);
-  SK.shift.fulfillmentTimes.push(fulfillmentMin);
-  SK.shift.ordersCompleted++;
-  if (order.quote?.amount) SK.shift.totalEarnings += order.quote.amount;
-
-  window.DB.updateOrderStatus(order.id, 'ready', {});
-  window.DB.notifyCustomerReady(order.id);
-
-  updateOrderCardStatus(order.id, 'ready');
-  updateStats();
-
-  // Confetti
-  triggerShopkeeperConfetti();
-  LB.toast(t('panel.orderReady'), 'success');
-  closeOrderPanel();
-  LB.analytics('order_ready', { orderId: order.id });
-
-  // Play ready sound
-  if (window.playForegroundAlert) window.playForegroundAlert('order-ready');
-}
-
-function cancelOrder(order) {
-  LB.modal({
-    title: t('modal.cancelTitle'),
-    body: t('modal.cancelBody'),
-    confirmLabel: t('modal.cancelConfirm'),
-    cancelLabel: t('modal.cancelKeep'),
-    dangerous: true,
-    onConfirm: () => {
-      order.status = 'cancelled';
-      window.DB.cancelOrder(order.id, 'Shopkeeper cancelled');
-      SK.orders = SK.orders.filter(o => o.id !== order.id);
-      removeOrderCard(order.id);
-      updateOrderCount();
-      closeOrderPanel();
-      LB.toast(t('panel.orderCancelled'), 'info');
-      LB.analytics('order_cancelled_by_shopkeeper', { orderId: order.id });
-    }
-  });
-}
-
-function updateOrderCardStatus(orderId, newStatus) {
-  const card = document.querySelector(`[data-order-id="${orderId}"]`);
-  if (!card) return;
-  const statusLabel = card.querySelector('.order-status-label');
-  if (statusLabel) {
-    statusLabel.className = `order-status-label status-${newStatus}`;
-    statusLabel.textContent = getStatusLabel(newStatus);
+  if (now >= warningTime && now < closingTime) {
+    showShopkeeperAlert('warn', t('shift.closingSoon', { time: fmtTime(closingTime) }));
   }
 }
 
-function removeOrderCard(orderId) {
-  const card = document.querySelector(`[data-order-id="${orderId}"]`);
-  if (card) {
-    card.style.opacity = '0';
-    card.style.transform = 'translateX(-10px)';
-    card.style.transition = 'all 0.3s ease';
-    setTimeout(() => card.remove(), 300);
+// ══════════════════════════════════════════════════════════════════
+//  DASHBOARD STATUS TOGGLE
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * updateDashboardStatus(isOnline)
+ * Updates the top-bar status pill and aria state.
+ * @param {boolean} isOnline
+ */
+function updateDashboardStatus(isOnline) {
+  const { dashStatusToggle, dashStatusLabel } = DOM;
+  if (!dashStatusToggle) return;
+
+  dashStatusToggle.className = `status-pill-sm ${isOnline ? 'online' : 'offline'}`;
+  dashStatusToggle.setAttribute('aria-pressed', isOnline ? 'true' : 'false');
+  if (dashStatusLabel) {
+    dashStatusLabel.textContent = isOnline ? t('status.online') : t('status.offline');
   }
 }
 
-function updateStats() {
-  const ordersEl  = document.getElementById('stat-orders');
-  const earningsEl = document.getElementById('stat-earnings');
-  const readyEl   = document.getElementById('stat-ready-time');
+/**
+ * toggleShopStatus()
+ * Called when shopkeeper taps the status pill to go temporarily offline.
+ */
+async function toggleShopStatus() {
+  const isCurrentlyOnline = DOM.dashStatusToggle?.getAttribute('aria-pressed') === 'true';
+  const newStatus = !isCurrentlyOnline;
+  const cfg = getShopConfig();
 
-  if (ordersEl) ordersEl.textContent = SK.shift.ordersCompleted;
-  if (earningsEl) earningsEl.textContent = LB.formatINR(SK.shift.totalEarnings);
-  if (readyEl) {
-    const avg = SK.shift.fulfillmentTimes.length
-      ? Math.round(SK.shift.fulfillmentTimes.reduce((a,b) => a+b, 0) / SK.shift.fulfillmentTimes.length)
-      : null;
-    readyEl.textContent = avg ? avg + ' min' : '—';
-  }
+  try {
+    // TODO: Replace with Firebase update
+    DB.setShopStatus(cfg.shopId, newStatus ? 'online' : 'offline');
+  } catch(e) {}
+
+  updateDashboardStatus(newStatus);
+  showToast(newStatus ? t('status.wentOnline') : t('status.wentOffline'), newStatus ? 'success' : '');
 }
 
-// ─── Shop Status Toggle ───────────────────────────────────────────────────────
-function toggleShopStatus() {
-  const btn = document.getElementById('btn-status-toggle');
-  if (!btn) return;
+// ══════════════════════════════════════════════════════════════════
+//  ORDER LISTENER + FEED
+// ══════════════════════════════════════════════════════════════════
 
-  const isOnline = btn.classList.contains('online');
-  if (isOnline) {
-    LB.modal({
-      title: t('modal.goOfflineTitle'),
-      body: t('modal.goOfflineBody'),
-      confirmLabel: t('modal.goOfflineConfirm'),
-      cancelLabel: t('modal.cancel'),
-      onConfirm: () => {
-        btn.classList.remove('online');
-        btn.classList.add('offline');
-        btn.setAttribute('aria-pressed', 'false');
-        btn.innerHTML = `<span aria-hidden="true">🔴</span> <span>${t('dashboard.offline')}</span>`;
-        window.DB.setShopStatus(SK.shopId, 'offline');
-        LB.toast(t('alert.shopOffline'), 'warn');
-      }
-    });
-  } else {
-    btn.classList.remove('offline');
-    btn.classList.add('online');
-    btn.setAttribute('aria-pressed', 'true');
-    btn.innerHTML = `<span class="live-dot" aria-hidden="true"></span> <span>${t('dashboard.online')}</span>`;
-    window.DB.setShopStatus(SK.shopId, 'online');
-    LB.toast(t('alert.shopOnline'), 'success');
-  }
-}
+/**
+ * startOrderListener(shopId)
+ * Registers a real-time order listener via DB.listenOrders().
+ * Each new/updated order triggers renderOrderCard().
+ *
+ * TODO: When Firebase is connected, DB.listenOrders returns an unsubscribe fn.
+ *       The returned fn is stored in orderListenerUnsubscribe and called on shift end.
+ */
+function startOrderListener(shopId) {
+  try {
+    // TODO: Replace stub with:
+    // orderListenerUnsubscribe = firebase.firestore()
+    //   .collection('orders')
+    //   .where('shopId', '==', shopId)
+    //   .where('status', 'not-in', ['completed', 'cancelled'])
+    //   .onSnapshot(snapshot => {
+    //     snapshot.docChanges().forEach(change => {
+    //       if (change.type === 'added')    handleNewOrder(change.doc.data());
+    //       if (change.type === 'modified') handleOrderUpdate(change.doc.data());
+    //       if (change.type === 'removed')  removeOrderCard(change.doc.id);
+    //     });
+    //   });
+    orderListenerUnsubscribe = DB.listenOrders(shopId, onNewOrderFromDB);
 
-// ─── End Shift ────────────────────────────────────────────────────────────────
-function promptEndShift() {
-  const pendingOrders = SK.orders.filter(o => o.status !== 'ready' && o.status !== 'cancelled').length;
-
-  LB.modal({
-    title: t('modal.endShiftTitle'),
-    body: pendingOrders > 0
-      ? t('modal.endShiftPendingBody', { count: pendingOrders })
-      : t('modal.endShiftBody'),
-    confirmLabel: t('modal.endShiftConfirm'),
-    cancelLabel: t('modal.cancel'),
-    dangerous: true,
-    onConfirm: endShift
-  });
-}
-
-function endShift() {
-  SK.shift.active = false;
-  window.DB.setShopStatus(SK.shopId, 'offline');
-
-  if (SK.autoCloseInterval) clearInterval(SK.autoCloseInterval);
-  if (SK.unsubscribeOrders) SK.unsubscribeOrders();
-
-  renderShiftSummary();
-  LB.analytics('shift_ended', {
-    ordersCompleted: SK.shift.ordersCompleted,
-    totalEarnings: SK.shift.totalEarnings
-  });
-}
-
-// ─── Auto-close Guard ─────────────────────────────────────────────────────────
-function startAutoCloseGuard() {
-  SK.autoCloseInterval = setInterval(() => {
-    const now = new Date();
-    const closingTime = new Date();
-    closingTime.setHours(SK.shopConfig.closingHour, SK.shopConfig.closingMinute, 0, 0);
-    const warningTime = new Date(closingTime.getTime() - 15 * 60000);
-
-    if (now >= warningTime && now < closingTime) {
-      LB.toast(t('shift.closingSoon', { time: LB.formatTime(closingTime) }), 'warn');
-    }
-
-    if (now >= closingTime) {
-      clearInterval(SK.autoCloseInterval);
-      endShift();
-    }
-  }, 60000);
-}
-
-// ─── Order Listener ───────────────────────────────────────────────────────────
-function startOrderListener() {
-  // TODO: Replace with real Firebase real-time listener:
-  // SK.unsubscribeOrders = window.DB.listenOrders(SK.shopId, orders => {
-  //   const newOrders = orders.filter(o => !SK.orders.find(existing => existing.id === o.id));
-  //   newOrders.forEach(order => onNewOrderReceived(order));
-  // });
-
-  // Demo: simulate a new order arriving after 15 seconds
-  setTimeout(() => {
-    if (SK.shift.active) {
-      const demoOrder = {
-        id: 'LB-' + Math.floor(Math.random() * 9000 + 1000),
-        customerName: 'Meena K.',
-        createdAt: new Date().toISOString(),
-        pickupTime: new Date(Date.now() + 25 * 60000).toISOString(),
-        paymentMethod: 'cash',
-        status: 'pending',
-        orderText: 'Dettol Hand Wash 250ml × 2\nColgate Toothpaste 150g\nSurf Excel 1kg',
-        note: '',
-        uploadedPhoto: null
+    // DEMO: Inject a mock order after 2 seconds for demonstration
+    setTimeout(() => {
+      const mockOrder = {
+        id:          'LB-' + Math.floor(8000 + Math.random() * 2000),
+        customerId:  'cust-demo',
+        customerName:'Priyanka B.',
+        orderText:   'Tata Salt 1kg × 2\nAmul Butter 500g\nMaggi Noodles × 3',
+        photoUrl:    null,
+        paymentType: 'pickup', // 'pickup' | 'upi'
+        pickupTime:  new Date(Date.now() + 25 * 60000).toISOString(),
+        createdAt:   new Date().toISOString(),
+        status:      'pending',
+        shopId:      shopId,
       };
-      onNewOrderReceived(demoOrder);
-    }
-  }, 15000);
+      onNewOrderFromDB(mockOrder);
+    }, 2000);
+
+  } catch(e) { console.error('[Orders] Listener error:', e); }
 }
 
-// ─── Shift Summary (#shift-end) ───────────────────────────────────────────────
-function renderShiftSummary() {
-  skNavigate('shift-end');
+/**
+ * onNewOrderFromDB(order)
+ * Called by the DB listener whenever a new order arrives.
+ * Handles audio, vibration, screen flash, and card rendering.
+ * @param {Object} order
+ */
+function onNewOrderFromDB(order) {
+  const isExisting = orderCache.has(order.id);
+  orderCache.set(order.id, order);
 
-  const el = document.getElementById('shift-end');
-  if (!el) return;
+  if (!isExisting) {
+    // 🔔 New order alert
+    alertNewOrder();
+    prependOrderCard(order);
+    updateOrdersBadge();
+    updateStatsDisplay();
 
-  const pendingOrders = SK.orders.filter(o => o.status !== 'ready' && o.status !== 'cancelled');
-  const avgTime = SK.shift.fulfillmentTimes.length
-    ? Math.round(SK.shift.fulfillmentTimes.reduce((a,b) => a+b, 0) / SK.shift.fulfillmentTimes.length)
-    : 0;
+    // If push notifications are available and page is not focused
+    if (!document.hasFocus() && window.notifications) {
+      // TODO: Fire push notification via notifications.js
+      console.log('[Push] Would fire push for order', order.id);
+    }
+  } else {
+    // Order was updated — re-render existing card
+    updateOrderCardDOM(order);
+  }
+}
 
-  el.innerHTML = `
-    <div class="shift-summary-inner">
-      <div class="summary-header">
-        <span class="summary-icon" aria-hidden="true">🏁</span>
-        <h1 class="summary-title" data-i18n="summary.title">${t('summary.title')}</h1>
-        <p class="summary-shop-name">${SK.shopName}</p>
-      </div>
+/**
+ * alertNewOrder()
+ * Plays sound + vibrates + flashes screen on new order arrival.
+ */
+function alertNewOrder() {
+  // 1. Audio
+  if (window.playForegroundAlert) {
+    window.playForegroundAlert('new-order');
+  } else if (DOM.audioUnlock) {
+    DOM.audioUnlock.src = 'assets/sounds/new-order.mp3';
+    DOM.audioUnlock.currentTime = 0;
+    DOM.audioUnlock.play().catch(() => {});
+  }
 
-      <div class="summary-card">
-        <div class="summary-row">
-          <span class="summary-label" data-i18n="summary.ordersCompleted">${t('summary.ordersCompleted')}</span>
-          <strong class="summary-value">${SK.shift.ordersCompleted}</strong>
-        </div>
-        <div class="summary-row">
-          <span class="summary-label" data-i18n="summary.totalEarnings">${t('summary.totalEarnings')}</span>
-          <strong class="summary-value">${LB.formatINR(SK.shift.totalEarnings)}</strong>
-        </div>
-        <div class="summary-row">
-          <span class="summary-label" data-i18n="summary.avgTime">${t('summary.avgTime')}</span>
-          <strong class="summary-value">${avgTime ? avgTime + ' min' : '—'}</strong>
-        </div>
-      </div>
+  // 2. Vibration
+  if (navigator.vibrate) {
+    navigator.vibrate([200, 100, 200, 100, 200]);
+  }
 
-      ${pendingOrders.length > 0 ? `
-        <div class="pending-warning" role="alert">
-          <span aria-hidden="true">⚠️</span>
-          <p>${t('summary.pendingWarning', { count: pendingOrders.length })}</p>
-        </div>
-      ` : ''}
+  // 3. Screen flash
+  if (DOM.flashOverlay) {
+    DOM.flashOverlay.classList.add('flash-active');
+    setTimeout(() => DOM.flashOverlay.classList.remove('flash-active'), 350);
+  }
+}
 
-      <button class="btn btn-wa btn-large" id="btn-export-summary" style="width:100%; margin-top:24px">
-        📤 ${t('summary.exportWA')}
-      </button>
+// ══════════════════════════════════════════════════════════════════
+//  ORDER CARD RENDERING
+// ══════════════════════════════════════════════════════════════════
 
-      <button class="btn btn-outline btn-large" id="btn-new-shift" style="width:100%; margin-top:12px">
-        ${t('summary.startNewShift')}
+/**
+ * getUrgencyClass(order)
+ * Determines the urgency colour for an order card.
+ * 🔴 Red:   pickup < 10 min OR order > 20 min old with no action
+ * 🟡 Amber: pickup 10–30 min OR order 10–20 min old
+ * 🟢 Green: new + plenty of time
+ * @param {Object} order
+ * @returns {'urgency-red'|'urgency-amber'|'urgency-green'}
+ */
+function getUrgencyClass(order) {
+  const now       = Date.now();
+  const pickup    = new Date(order.pickupTime).getTime();
+  const created   = new Date(order.createdAt).getTime();
+  const minsToPickup = (pickup - now) / 60000;
+  const minsOld      = (now - created) / 60000;
+
+  if (minsToPickup < 10 || (minsOld > 20 && order.status === 'pending')) return 'urgency-red';
+  if (minsToPickup < 30 || minsOld > 10) return 'urgency-amber';
+  return 'urgency-green';
+}
+
+/**
+ * buildOrderCard(order)
+ * Creates an order card DOM element.
+ * @param {Object} order
+ * @returns {HTMLElement}
+ */
+function buildOrderCard(order) {
+  const urgency    = getUrgencyClass(order);
+  const pickupDate = new Date(order.pickupTime);
+  const createdAt  = new Date(order.createdAt);
+  const payLabel   = order.paymentType === 'upi' ? t('payment.upi') : t('payment.pickup');
+  const payClass   = order.paymentType === 'upi' ? 'upi' : 'cash';
+  const preview    = (order.orderText || '').split('\n').slice(0, 2).join(', ');
+
+  const article = document.createElement('article');
+  article.className = `order-card ${urgency}`;
+  article.setAttribute('role', 'listitem');
+  article.setAttribute('data-order-id', order.id);
+  article.setAttribute('tabindex', '0');
+  article.style.animationDelay = '0ms';
+
+  article.innerHTML = `
+    <div class="order-card-header">
+      <span class="order-id">${escHtml(order.id)}</span>
+      <span class="order-customer">${escHtml(order.customerName)}</span>
+      <span class="order-time">${fmtTime(createdAt)}</span>
+    </div>
+    <div class="order-card-meta">
+      <span class="payment-badge ${payClass}">${escHtml(payLabel)}</span>
+      <span class="pickup-eta">${t('order.readyBy')} ${fmtTime(pickupDate)}</span>
+    </div>
+    <p class="order-preview">"${escHtml(preview)}…"</p>
+    <div class="order-card-footer">
+      <span class="order-status-badge ${order.status}">${t('status.' + order.status)}</span>
+      <button class="btn-tap-manage" aria-label="${t('order.manage')} ${escHtml(order.id)}">
+        ${t('order.tapManage')} →
       </button>
     </div>
   `;
 
-  document.getElementById('btn-export-summary')?.addEventListener('click', exportSummaryToWhatsApp);
-  document.getElementById('btn-new-shift')?.addEventListener('click', () => {
-    // Reset shift state
-    SK.shift = { active: false, startTime: null, ordersCompleted: 0, totalEarnings: 0, fulfillmentTimes: [] };
-    SK.orders = [];
-    renderShiftStart();
+  // Tap to open action panel
+  article.addEventListener('click', () => openOrderPanel(order.id));
+  article.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openOrderPanel(order.id); });
+
+  return article;
+}
+
+/**
+ * prependOrderCard(order)
+ * Adds a new order card to the top of the feed with slide-down animation.
+ * Hides the empty state.
+ * @param {Object} order
+ */
+function prependOrderCard(order) {
+  const feed = DOM.ordersFeed;
+  if (!feed) return;
+
+  // Hide empty state
+  if (DOM.ordersEmptyState) DOM.ordersEmptyState.style.display = 'none';
+
+  const card = buildOrderCard(order);
+  card.style.animation = 'slideDown 300ms ease forwards';
+  feed.insertBefore(card, feed.firstChild);
+}
+
+/**
+ * updateOrderCardDOM(order)
+ * Updates an existing order card's urgency class and status badge.
+ * @param {Object} order
+ */
+function updateOrderCardDOM(order) {
+  const existing = document.querySelector(`[data-order-id="${order.id}"]`);
+  if (!existing) { prependOrderCard(order); return; }
+
+  // Update urgency class
+  existing.className = `order-card ${getUrgencyClass(order)}`;
+
+  // Update status badge
+  const badge = existing.querySelector('.order-status-badge');
+  if (badge) {
+    badge.className = `order-status-badge ${order.status}`;
+    badge.textContent = t('status.' + order.status);
+  }
+}
+
+/**
+ * removeOrderCard(orderId)
+ * Removes an order card from the DOM (order cancelled/completed).
+ * @param {string} orderId
+ */
+function removeOrderCard(orderId) {
+  const el = document.querySelector(`[data-order-id="${orderId}"]`);
+  if (el) {
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(20px)';
+    el.style.transition = '300ms ease';
+    setTimeout(() => el.remove(), 310);
+  }
+  orderCache.delete(orderId);
+  updateOrdersBadge();
+
+  // Show empty state if no more cards
+  if (orderCache.size === 0 && DOM.ordersEmptyState) {
+    DOM.ordersEmptyState.style.display = '';
+  }
+}
+
+/**
+ * updateOrdersBadge()
+ * Updates the active orders count badge on the Orders tab.
+ */
+function updateOrdersBadge() {
+  const active = Array.from(orderCache.values()).filter(o => o.status !== 'ready' && o.status !== 'cancelled').length;
+  if (DOM.ordersCountBadge) DOM.ordersCountBadge.textContent = active;
+}
+
+/**
+ * updateStatsDisplay()
+ * Refreshes the 3-column stats row in the dashboard.
+ */
+function updateStatsDisplay() {
+  if (DOM.statOrdersToday)  DOM.statOrdersToday.textContent  = shift.ordersCount;
+  if (DOM.statEarningsToday)DOM.statEarningsToday.textContent = fmtCurrency(shift.earnings);
+  const avg = shift.readyTimes.length
+    ? Math.round(shift.readyTimes.reduce((a,b)=>a+b,0) / shift.readyTimes.length / 60000) + ' min'
+    : '—';
+  if (DOM.statAvgReady) DOM.statAvgReady.textContent = avg;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  ORDER ACTION PANEL
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * openOrderPanel(orderId)
+ * Opens the full-screen bottom sheet for managing a specific order.
+ * @param {string} orderId
+ */
+function openOrderPanel(orderId) {
+  const order = orderCache.get(orderId);
+  if (!order) return;
+  activeOrder = order;
+
+  // Populate panel content
+  if (DOM.panelOrderId)    DOM.panelOrderId.textContent    = order.id;
+  if (DOM.panelCustomerMeta) {
+    const pickup = new Date(order.pickupTime);
+    const created = new Date(order.createdAt);
+    DOM.panelCustomerMeta.textContent = `${order.customerName} · ${fmtTime(created)} · ${t('order.readyBy')} ${fmtTime(pickup)}`;
+  }
+  if (DOM.panelOrderText)  DOM.panelOrderText.textContent  = order.orderText || '';
+  if (DOM.panelPhotoWrap) {
+    if (order.photoUrl) {
+      DOM.panelPhotoWrap.removeAttribute('hidden');
+      if (DOM.panelOrderPhoto) DOM.panelOrderPhoto.src = order.photoUrl;
+    } else {
+      DOM.panelPhotoWrap.setAttribute('hidden', '');
+    }
+  }
+  if (DOM.panelPaymentInfo) {
+    DOM.panelPaymentInfo.textContent = order.paymentType === 'upi'
+      ? t('payment.upiPaid')
+      : t('payment.atPickup');
+  }
+
+  // Pre-fill bill amount / notes if already quoted
+  if (DOM.billAmount) DOM.billAmount.value = order.billAmount || '';
+  if (DOM.subNotes)   DOM.subNotes.value   = order.notes      || '';
+
+  // Render OOS chips in panel (from shift OOS set)
+  renderPanelOosChips();
+
+  // Show/hide action buttons based on current status
+  updatePanelButtons(order.status);
+
+  // Open overlay
+  if (DOM.orderPanelOverlay) {
+    DOM.orderPanelOverlay.removeAttribute('hidden');
+    // Focus trap: focus first focusable element
+    setTimeout(() => DOM.btnClosePanel?.focus(), 50);
+  }
+
+  // Trap scroll on body
+  document.body.style.overflow = 'hidden';
+}
+
+/**
+ * closeOrderPanel()
+ */
+function closeOrderPanel() {
+  if (DOM.orderPanelOverlay) DOM.orderPanelOverlay.setAttribute('hidden', '');
+  document.body.style.overflow = '';
+  activeOrder = null;
+
+  // Return focus to the order card that opened the panel
+  // (handled by browser naturally via tabindex)
+}
+
+/**
+ * updatePanelButtons(status)
+ * Shows/hides action buttons based on order status.
+ * @param {string} status
+ */
+function updatePanelButtons(status) {
+  // Quote: only if still pending
+  if (DOM.btnSendQuote)   DOM.btnSendQuote.style.display   = status === 'pending' ? '' : 'none';
+  // Packing: only if quoted
+  if (DOM.btnMarkPacking) DOM.btnMarkPacking.style.display  = status === 'quoted' ? '' : 'none';
+  // Ready: if packing
+  if (DOM.btnMarkReady)   DOM.btnMarkReady.style.display    = status === 'packing' ? '' : 'none';
+  // Cancel: not if already ready/cancelled
+  if (DOM.btnCancelOrder) DOM.btnCancelOrder.style.display  = ['pending','quoted','packing'].includes(status) ? '' : 'none';
+}
+
+/**
+ * sendQuote()
+ * Saves bill amount + notes, updates order status to 'quoted',
+ * sends push notification to customer.
+ */
+async function sendQuote() {
+  if (!activeOrder) return;
+  const amount = parseFloat(DOM.billAmount?.value) || 0;
+  const notes  = DOM.subNotes?.value.trim() || '';
+
+  if (!amount || amount <= 0) {
+    showToast(t('panel.error.billRequired'), 'error'); return;
+  }
+
+  try {
+    // TODO: Replace with Firebase update
+    DB.updateOrderStatus(activeOrder.id, 'quoted', { billAmount: amount, notes });
+    DB.notifyCustomerQuoted(activeOrder.id, amount, notes);
+
+    activeOrder.status     = 'quoted';
+    activeOrder.billAmount = amount;
+    activeOrder.notes      = notes;
+    orderCache.set(activeOrder.id, activeOrder);
+
+    updateOrderCardDOM(activeOrder);
+    updatePanelButtons('quoted');
+    shift.ordersCount++;
+    shift.earnings += amount;
+    updateStatsDisplay();
+
+    showToast(t('panel.quoteSent'), 'success');
+  } catch(e) {
+    showToast(t('panel.error.generic'), 'error');
+  }
+}
+
+/**
+ * markPacking()
+ * Moves order to 'packing' status.
+ */
+async function markPacking() {
+  if (!activeOrder) return;
+  try {
+    DB.updateOrderStatus(activeOrder.id, 'packing', {});
+    activeOrder.status = 'packing';
+    orderCache.set(activeOrder.id, activeOrder);
+    updateOrderCardDOM(activeOrder);
+    updatePanelButtons('packing');
+    showToast(t('panel.packing'), 'success');
+  } catch(e) { showToast(t('panel.error.generic'), 'error'); }
+}
+
+/**
+ * markReady()
+ * Moves order to 'ready' status.
+ * Fires customer SMS hook + CSS confetti burst.
+ * Records ready time for avg. calculation.
+ */
+async function markReady() {
+  if (!activeOrder) return;
+  try {
+    DB.updateOrderStatus(activeOrder.id, 'ready', {});
+    DB.notifyCustomerReady(activeOrder.id);
+
+    // Record fulfillment time
+    const createdAt = new Date(activeOrder.createdAt).getTime();
+    shift.readyTimes.push(Date.now() - createdAt);
+
+    activeOrder.status = 'ready';
+    orderCache.set(activeOrder.id, activeOrder);
+    updateOrderCardDOM(activeOrder);
+    updatePanelButtons('ready');
+    updateStatsDisplay();
+
+    // 🎉 Confetti burst (CSS-only, respects prefers-reduced-motion)
+    triggerConfetti();
+
+    showToast(t('panel.readyNotified'), 'success');
+
+    // Auto-close panel after 1.5s
+    setTimeout(closeOrderPanel, 1500);
+  } catch(e) { showToast(t('panel.error.generic'), 'error'); }
+}
+
+/**
+ * cancelOrderWithConfirm()
+ * Shows custom confirm dialog before cancelling.
+ */
+function cancelOrderWithConfirm() {
+  if (!activeOrder) return;
+  showModal({
+    title:        t('cancel.title'),
+    body:         t('cancel.body'),
+    confirmLabel: t('cancel.confirm'),
+    cancelLabel:  t('cancel.dismiss'),
+    dangerous:    true,
+    onConfirm: async () => {
+      try {
+        DB.cancelOrder(activeOrder.id, 'shopkeeper_cancelled');
+        removeOrderCard(activeOrder.id);
+        closeOrderPanel();
+        showToast(t('cancel.done'), '');
+      } catch(e) { showToast(t('panel.error.generic'), 'error'); }
+    }
   });
 }
 
-function exportSummaryToWhatsApp() {
-  const avgTime = SK.shift.fulfillmentTimes.length
-    ? Math.round(SK.shift.fulfillmentTimes.reduce((a,b) => a+b, 0) / SK.shift.fulfillmentTimes.length)
-    : 0;
+// ══════════════════════════════════════════════════════════════════
+//  CONFETTI (CSS-ONLY)
+// ══════════════════════════════════════════════════════════════════
 
-  const date = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+/**
+ * triggerConfetti()
+ * Creates 12 confetti pieces and triggers CSS animation.
+ * Respects prefers-reduced-motion: no-preference.
+ */
+function triggerConfetti() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-  const msg = encodeURIComponent(
-    `📊 *LocalBuy — Shift Summary*\n${SK.shopName}\n${date}\n\n` +
-    `✅ Orders completed: ${SK.shift.ordersCompleted}\n` +
-    `💰 Total earnings: ${LB.formatINR(SK.shift.totalEarnings)}\n` +
-    `⏱️ Avg. ready time: ${avgTime ? avgTime + ' min' : 'N/A'}\n\n` +
-    `Powered by LocalBuy 🛒 localbuy.in`
-  );
+  const burst  = DOM.confettiBurst;
+  if (!burst) return;
+  burst.innerHTML = '';
 
-  // Open WhatsApp to shop owner's own number
-  // TODO: Use authenticated phone number from shop profile — never hardcode
-  window.open(`https://wa.me/?text=${msg}`, '_blank', 'noopener,noreferrer');
-  LB.analytics('shift_summary_exported');
-}
+  const colours = ['#0f5c3a','#d97706','#16a34a','#f59e0b','#3b82f6','#ef4444'];
 
-// ─── Confetti (CSS-only) ──────────────────────────────────────────────────────
-function triggerShopkeeperConfetti() {
-  const container = document.createElement('div');
-  container.className = 'confetti-container';
-  container.setAttribute('aria-hidden', 'true');
-  const colors = ['#0f5c3a', '#d97706', '#16a34a', '#fbbf24', '#059669', '#f59e0b'];
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 12; i++) {
     const piece = document.createElement('div');
     piece.className = 'confetti-piece';
     piece.style.cssText = `
-      left: ${Math.random() * 100}%; background: ${colors[i % colors.length]};
-      animation-delay: ${Math.random() * 0.4}s;
-      animation-duration: ${0.7 + Math.random() * 0.7}s;
-      width: ${6 + Math.random() * 6}px; height: ${6 + Math.random() * 6}px;
+      left:             ${10 + Math.random() * 80}%;
+      top:              ${Math.random() * 20}%;
+      background:       ${colours[i % colours.length]};
+      border-radius:    ${Math.random() > 0.5 ? '50%' : '2px'};
+      width:            ${6 + Math.random() * 8}px;
+      height:           ${6 + Math.random() * 8}px;
+      animation:        confetti-fall ${0.8 + Math.random() * 0.8}s ease ${Math.random() * 0.3}s forwards;
     `;
-    container.appendChild(piece);
+    burst.appendChild(piece);
   }
-  document.body.appendChild(container);
-  setTimeout(() => container.remove(), 2500);
+
+  burst.classList.add('confetti-active');
+  setTimeout(() => { burst.innerHTML = ''; burst.classList.remove('confetti-active'); }, 1500);
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+//  OOS (OUT-OF-STOCK) MANAGEMENT
+// ══════════════════════════════════════════════════════════════════
+
+const DEFAULT_OOS_ITEMS = [
+  'Tata Salt 1kg', 'Amul Butter 500g', 'Maggi Noodles',
+  'Parle-G Biscuits', 'Surf Excel 1kg', 'Paracetamol 500mg',
+];
+
+/**
+ * restoreOosItems()
+ * Loads OOS state from localStorage and renders chips.
+ */
+function restoreOosItems() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('lb_oos_items') || '[]');
+    saved.forEach(item => oosItems.add(item));
+  } catch(e) {}
+  renderOosChips();
+}
+
+/**
+ * renderOosChips()
+ * Renders all OOS chips in the inventory panel.
+ */
+function renderOosChips() {
+  const grid = DOM.oosChipsGrid;
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const allItems = [...new Set([...DEFAULT_OOS_ITEMS, ...oosItems])];
+  allItems.forEach(item => {
+    const btn = document.createElement('button');
+    btn.className = 'oos-chip';
+    btn.textContent = item;
+    btn.dataset.item = item;
+    btn.setAttribute('aria-pressed', oosItems.has(item) ? 'true' : 'false');
+    btn.addEventListener('click', () => toggleOosItem(item, btn));
+    grid.appendChild(btn);
+  });
+
+  saveOosItems();
+  renderPanelOosChips();
+}
+
+/**
+ * toggleOosItem(item, btn)
+ * Marks/unmarks an item as OOS.
+ * @param {string} item
+ * @param {HTMLElement} btn
+ */
+function toggleOosItem(item, btn) {
+  if (oosItems.has(item)) {
+    oosItems.delete(item);
+    btn.setAttribute('aria-pressed', 'false');
+  } else {
+    oosItems.add(item);
+    btn.setAttribute('aria-pressed', 'true');
+  }
+  saveOosItems();
+  renderPanelOosChips();
+}
+
+/**
+ * addOosItem(item)
+ * Adds a custom OOS item.
+ * @param {string} item
+ */
+function addOosItem(item) {
+  if (!item || item.length < 2) { showToast(t('oos.error.empty'), 'warn'); return; }
+  oosItems.add(item);
+  renderOosChips();
+  if (DOM.oosCustomInput) DOM.oosCustomInput.value = '';
+}
+
+/**
+ * clearAllOos()
+ * Removes all OOS markings.
+ */
+function clearAllOos() {
+  oosItems.clear();
+  renderOosChips();
+}
+
+/**
+ * saveOosItems()
+ * Persists OOS set to localStorage.
+ */
+function saveOosItems() {
+  try { localStorage.setItem('lb_oos_items', JSON.stringify([...oosItems])); } catch(e) {}
+}
+
+/**
+ * renderPanelOosChips()
+ * Renders compact OOS chips inside the order action panel.
+ */
+function renderPanelOosChips() {
+  const container = DOM.panelOosChips;
+  if (!container) return;
+  container.innerHTML = '';
+
+  oosItems.forEach(item => {
+    const chip = document.createElement('button');
+    chip.className = 'oos-chip';
+    chip.setAttribute('aria-pressed', 'true');
+    chip.textContent = item;
+    chip.style.fontSize = '12px';
+    // Pre-populate sub-notes with OOS item
+    chip.addEventListener('click', () => {
+      const notesEl = DOM.subNotes;
+      if (notesEl && notesEl.value.indexOf(item) === -1) {
+        notesEl.value += (notesEl.value ? '\n' : '') + `${item} — ${t('oos.notAvailable')}`;
+      }
+    });
+    container.appendChild(chip);
+  });
+
+  if (oosItems.size === 0) {
+    container.innerHTML = `<span style="font-size:12px;color:var(--color-muted)">${t('oos.none')}</span>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  DASHBOARD TABS
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * switchTab(panelId)
+ * Switches between 'orders' and 'inventory' panels.
+ * @param {'orders'|'inventory'} panelId
+ */
+function switchTab(panelId) {
+  const panels = { orders: DOM.panelOrders, inventory: DOM.panelInventory };
+  const tabs   = { orders: DOM.tabOrders,   inventory: DOM.tabInventory   };
+
+  Object.entries(panels).forEach(([id, panel]) => {
+    const isActive = id === panelId;
+    if (panel) {
+      if (isActive) panel.removeAttribute('hidden');
+      else panel.setAttribute('hidden', '');
+    }
+    if (tabs[id]) {
+      tabs[id].classList.toggle('active', isActive);
+      tabs[id].setAttribute('aria-selected', isActive ? 'true' : 'false');
+    }
+  });
+
+  // Render OOS chips when switching to inventory tab
+  if (panelId === 'inventory') renderOosChips();
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  PULL-TO-REFRESH HINT
+// ══════════════════════════════════════════════════════════════════
+
+function initPullHint() {
+  let lastScrollY = 0;
+  const feed = DOM.ordersFeed;
+  if (!feed) return;
+
+  feed.addEventListener('scroll', () => {
+    const current = feed.scrollTop;
+    if (lastScrollY > current && (lastScrollY - current) > 80) {
+      if (DOM.pullHint) DOM.pullHint.classList.add('visible');
+      setTimeout(() => DOM.pullHint?.classList.remove('visible'), 2000);
+    }
+    lastScrollY = current;
+  }, { passive: true });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  WHATSAPP SHIFT EXPORT
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * exportShiftToWhatsApp()
+ * Builds a shift summary message and opens wa.me with it.
+ */
+function exportShiftToWhatsApp() {
+  const cfg = getShopConfig();
+  const avgReady = shift.readyTimes.length
+    ? Math.round(shift.readyTimes.reduce((a,b)=>a+b,0) / shift.readyTimes.length / 60000) + ' min'
+    : 'N/A';
+
+  const msg = encodeURIComponent(
+    `📊 *LocalBuy Shift Summary*\n` +
+    `🏪 ${cfg.shopName} · ${cfg.area}\n` +
+    `📅 ${new Date().toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long' })}\n\n` +
+    `✅ Orders completed: ${shift.ordersCount}\n` +
+    `💰 Earnings: ${fmtCurrency(shift.earnings)}\n` +
+    `⏱️ Avg. ready time: ${avgReady}\n\n` +
+    `Powered by LocalBuy — https://localbuy.in`
+  );
+
+  // Open WhatsApp to own number (shopkeeper reviews their own summary)
+  const phone = cfg.phone ? `91${cfg.phone}` : '';
+  window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SECURITY HELPER: HTML Escape
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * escHtml(str) — escapes HTML special characters to prevent XSS.
+ * Always use this when inserting user-generated content via innerHTML.
+ * @param {string} str
+ * @returns {string}
+ */
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  BOOTSTRAP: Attach all event listeners after DOM is ready
+// ══════════════════════════════════════════════════════════════════
+
 document.addEventListener('DOMContentLoaded', () => {
-  initLanguage();
+  cacheDOM();
 
-  // Start at shift-start screen
-  renderShiftStart();
+  // ── Registration ───────────────────────────────────────────
+  DOM.btnRegister?.addEventListener('click', handleRegistration);
 
-  console.log('[LocalBuy] shopkeeper.js initialised');
+  // ── Shift start ────────────────────────────────────────────
+  DOM.btnStartShift?.addEventListener('click', startShift);
+
+  // ── Dashboard: Status toggle ───────────────────────────────
+  DOM.dashStatusToggle?.addEventListener('click', toggleShopStatus);
+
+  // ── Dashboard: End shift ────────────────────────────────────
+  DOM.btnEndShift?.addEventListener('click', () => {
+    showModal({
+      title:        t('shiftEnd.confirmTitle'),
+      body:         t('shiftEnd.confirmBody'),
+      confirmLabel: t('shiftEnd.confirmBtn'),
+      cancelLabel:  t('modal.cancel'),
+      dangerous:    true,
+      onConfirm:    () => endShift(false),
+    });
+  });
+
+  // ── Dashboard tabs ──────────────────────────────────────────
+  DOM.tabOrders?.addEventListener('click', () => switchTab('orders'));
+  DOM.tabInventory?.addEventListener('click', () => switchTab('inventory'));
+
+  // ── Shopkeeper alert dismiss ────────────────────────────────
+  DOM.shopkeeperAlert?.querySelector('.alert-dismiss')?.addEventListener('click', hideShopkeeperAlert);
+
+  // ── Order panel: close ──────────────────────────────────────
+  DOM.btnClosePanel?.addEventListener('click', closeOrderPanel);
+  DOM.orderPanelOverlay?.addEventListener('click', e => {
+    // Close if clicking the overlay backdrop (not the panel itself)
+    if (e.target === DOM.orderPanelOverlay) closeOrderPanel();
+  });
+
+  // Keyboard: Escape closes panel
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (!DOM.orderPanelOverlay?.hasAttribute('hidden')) closeOrderPanel();
+      if (!DOM.appModalOverlay?.hasAttribute('hidden'))   hideModal();
+    }
+  });
+
+  // ── Order panel: action buttons ─────────────────────────────
+  DOM.btnSendQuote?.addEventListener('click', sendQuote);
+  DOM.btnMarkPacking?.addEventListener('click', markPacking);
+  DOM.btnMarkReady?.addEventListener('click', markReady);
+  DOM.btnCancelOrder?.addEventListener('click', cancelOrderWithConfirm);
+
+  // ── OOS panel ───────────────────────────────────────────────
+  DOM.btnClearOos?.addEventListener('click', clearAllOos);
+  DOM.btnOosAdd?.addEventListener('click', () => {
+    addOosItem(DOM.oosCustomInput?.value.trim() || '');
+  });
+  DOM.oosCustomInput?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') addOosItem(DOM.oosCustomInput.value.trim());
+  });
+
+  // ── Shift end: export + new shift ───────────────────────────
+  DOM.btnExportWA?.addEventListener('click', exportShiftToWhatsApp);
+  DOM.btnNewShift?.addEventListener('click', () => {
+    try { localStorage.removeItem('lb_shift_ended'); } catch(e) {}
+    populateShiftStartScreen();
+    window.showScreen('shift-start');
+  });
+
+  // ── Modal overlay backdrop click ─────────────────────────────
+  DOM.appModalOverlay?.addEventListener('click', e => {
+    if (e.target === DOM.appModalOverlay) hideModal();
+  });
+
+  // ── Pull-to-refresh hint ────────────────────────────────────
+  initPullHint();
+
+  // ── Populate shift-start screen on load ─────────────────────
+  populateShiftStartScreen();
+
+  // ── Apply saved language ─────────────────────────────────────
+  try {
+    const lang = localStorage.getItem('lb_lang') || 'en';
+    if (window.i18n && typeof window.i18n.setLang === 'function') {
+      window.i18n.setLang(lang);
+    }
+  } catch(e) {}
+
+  console.log('[LocalBuy] shopkeeper.js loaded ✓');
 });

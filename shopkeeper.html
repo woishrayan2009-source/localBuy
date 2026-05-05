@@ -1,820 +1,1613 @@
 <!DOCTYPE html>
-<html lang="en-IN" data-lang="en">
+<html lang="en-IN" dir="ltr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#d97706" />
-  <meta name="description" content="LocalBuy Shopkeeper Dashboard — manage orders from your counter." />
-  <title>Dashboard — LocalBuy Shopkeeper</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0f5c3a">
+  <meta name="description" content="LocalBuy Shopkeeper Dashboard — Manage orders from your Guwahati shop.">
+  <title>LocalBuy — Shop Dashboard</title>
 
-  <!-- Preconnect for Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400;1,9..144,600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- PWA -->
+  <link rel="manifest" href="assets/manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
 
-  <!-- PWA manifest -->
-  <link rel="manifest" href="assets/manifest.json" />
-  <link rel="icon" href="assets/icons/icon-192.png" />
+  <!-- Google Fonts: Fraunces + DM Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <!-- ─── Critical above-fold CSS (inlined, < 4KB) ─────────────────────── -->
+  <!-- ─────────────────────────────────────────────────────────────
+       CRITICAL CSS (inlined — above-fold, <4KB)
+       All design tokens live here so the page never flashes unstyled.
+  ───────────────────────────────────────────────────────────────── -->
   <style>
+    /* ── Design Tokens ─────────────────────────────────────── */
     :root {
-      --color-sage:       #0f5c3a;
-      --color-sage-mid:   #1a7a4e;
-      --color-sage-light: #e8f5ee;
-      --color-sage-pale:  #f0faf4;
-      --color-amber:      #d97706;
-      --color-amber-light:#fffbf0;
-      --color-surface:    #f8f7f4;
-      --color-ink:        #111827;
-      --color-muted:      #6b7280;
-      --status-open:      #16a34a;
-      --status-busy:      #d97706;
-      --status-closed:    #dc2626;
-      --color-wa:         #25d366;
-      --radius-sm: 8px;
-      --radius-md: 12px;
-      --radius-lg: 16px;
-      --shadow-card: 0 2px 12px rgba(15,92,58,0.08);
-      --shadow-amber: 0 8px 32px rgba(217,119,6,0.2);
+      --color-sage:        #0f5c3a;
+      --color-sage-mid:    #1a7a4e;
+      --color-sage-light:  #e8f5ee;
+      --color-sage-pale:   #f0faf4;
+      --color-amber:       #d97706;
+      --color-amber-light: #fffbf0;
+      --color-surface:     #f8f7f4;
+      --color-ink:         #111827;
+      --color-muted:       #6b7280;
+      --status-open:       #16a34a;
+      --status-busy:       #d97706;
+      --status-closed:     #dc2626;
+      --color-upi:         #5f259f;
+      --color-wa:          #25d366;
+      --radius-sm:         8px;
+      --radius-md:         12px;
+      --radius-lg:         16px;
+      --shadow-card:       0 2px 12px rgba(15,92,58,0.08);
+      --shadow-modal:      0 -4px 32px rgba(17,24,39,0.18);
+      --transition-fast:   150ms ease;
+      --transition-mid:    300ms ease;
     }
+
+    /* ── Reset ──────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 16px; -webkit-text-size-adjust: 100%; }
     body {
       font-family: 'DM Sans', sans-serif;
       background: var(--color-amber-light);
       color: var(--color-ink);
-      min-height: 100vh;
+      min-height: 100dvh;
+      overflow-x: hidden;
+    }
+
+    /* ── Typography ─────────────────────────────────────────── */
+    .font-display { font-family: 'Fraunces', serif; }
+    h1, h2, h3 { font-family: 'Fraunces', serif; line-height: 1.2; }
+
+    /* ── Accessibility: Focus rings ─────────────────────────── */
+    :focus-visible { outline: 2px solid var(--color-sage); outline-offset: 2px; }
+
+    /* ── Tap target minimum ─────────────────────────────────── */
+    button, a, [role="button"] { min-height: 44px; min-width: 44px; cursor: pointer; }
+
+    /* ── Button active state ─────────────────────────────────── */
+    button:active { transform: scale(0.97); transition: transform 100ms ease; }
+
+    /* ── Page wrapper: max-width centred ───────────────────── */
+    .page-shell {
       max-width: 540px;
       margin: 0 auto;
+      min-height: 100dvh;
+      position: relative;
+      background: var(--color-amber-light);
     }
-    /* All sections hidden by default — JS reveals them */
-    [data-sk-section] { display: none; }
-    [data-sk-section].active { display: block; }
-    button { font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; background: none; }
-    button:active { transform: scale(0.97); transition: transform 0.1s ease; }
-    a { color: inherit; text-decoration: none; }
-    :focus-visible { outline: 2px solid var(--color-sage); outline-offset: 2px; }
-    button, a, [role="button"], input, select, textarea { min-height: 44px; }
+
+    /* ── Hidden state (JS-driven SPA sections) ──────────────── */
+    [data-section] { display: none; }
+    [data-section].active { display: block; }
+
+    /* Preloader / initial hidden */
+    .screen { display: none; }
+    .screen.active { display: flex; flex-direction: column; min-height: 100dvh; }
   </style>
 
-  <!-- Full stylesheets -->
-  <link rel="stylesheet" href="css/main.css" />
-  <link rel="stylesheet" href="css/shopkeeper.css" />
-  <link rel="stylesheet" href="css/animations.css" />
+  <!-- Shared CSS loaded after critical above-fold styles -->
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/shopkeeper.css">
+  <link rel="stylesheet" href="css/animations.css">
 </head>
 
 <body>
 
-  <!--
-    ══════════════════════════════════════════════════════════════════════════
-    AUDIO ELEMENT — Pre-loaded for autoplay policy unlock
-    Shopkeeper taps "Start Shift" which calls .play() then .pause() on this
-    element to unlock browser audio policy before any actual orders arrive.
-    ══════════════════════════════════════════════════════════════════════════
-  -->
-  <audio id="audio-unlock" preload="auto" aria-hidden="true">
-    <!--
-      Sound files would live at assets/sounds/new-order.mp3
-      Using a data-URI stub here so the app runs without a server.
-      TODO: Replace with actual audio files at the paths below.
-    -->
-    <source src="assets/sounds/new-order.mp3" type="audio/mpeg" />
-  </audio>
-  <audio id="audio-ready" preload="auto" aria-hidden="true">
-    <source src="assets/sounds/order-ready.mp3" type="audio/mpeg" />
-  </audio>
+<!-- ════════════════════════════════════════════════════════════════
+     AUDIO: Pre-unlocked audio element for shopkeeper alerts.
+     On shift start we call .play().pause() to unlock browser
+     autoplay policy. After that, playForegroundAlert() works.
+═══════════════════════════════════════════════════════════════════ -->
+<audio id="audio-unlock" src="assets/sounds/new-order.mp3" preload="auto" aria-hidden="true"></audio>
 
-
-  <!-- ════════════════════════════════════════════════════════════════════════
-       LANGUAGE TOGGLE — Fixed top-right, persistent across all screens
-       Drives all [data-i18n="key"] elements via i18n.js
-  ═════════════════════════════════════════════════════════════════════════ -->
-  <div class="lang-toggle" id="lang-toggle" role="group" aria-label="Language selection">
-    <button class="lang-btn lang-btn--active" data-lang="en" aria-pressed="true">EN</button>
-    <button class="lang-btn" data-lang="hi" aria-pressed="false">हि</button>
-    <button class="lang-btn" data-lang="bn" aria-pressed="false">বা</button>
-    <button class="lang-btn" data-lang="as" aria-pressed="false">অ</button>
-  </div>
-
-
-  <!-- ════════════════════════════════════════════════════════════════════════
-       SCREEN 1: SHIFT START (#shift-start)
-       Full-screen. Shopkeeper MUST start shift to access dashboard.
-       Shop is hidden from customers until shift starts.
-  ═════════════════════════════════════════════════════════════════════════ -->
-  <div data-sk-section="shift-start" id="shift-start" class="active" aria-label="Start your shift">
-
-    <div class="shift-start__wrap">
-
-      <!-- Shop logo / brand area -->
-      <div class="shift-start__brand">
-        <!-- LocalBuy logo -->
-        <div class="shift-start__logo" aria-hidden="true">
-          <svg width="48" height="48" viewBox="0 0 28 28" fill="none">
-            <path d="M14 2L25.26 8.5V21.5L14 28L2.74 21.5V8.5L14 2Z" fill="var(--color-sage)"/>
-            <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <p class="shift-start__app-name">LocalBuy</p>
-        <p class="shift-start__tagline" data-i18n="shift.subtitle">Shopkeeper Dashboard</p>
-      </div>
-
-      <!-- Greeting — name pulled from localStorage -->
-      <div class="shift-start__greeting">
-        <h1 class="shift-start__hello" id="sk-greeting">
-          <!-- e.g. "Good morning, Rajesh 👋" — injected by JS -->
-        </h1>
-        <p class="shift-start__date" id="sk-date"></p>
-      </div>
-
-      <!-- Shop status pill — shows OFFLINE before shift -->
-      <div class="shift-start__status-pill" aria-live="polite">
-        <span class="status-dot status-dot--red" aria-hidden="true"></span>
-        <span data-i18n="shift.offline">Offline — Shop is hidden from customers</span>
-      </div>
-
-      <!-- Shop hours reminder -->
-      <div class="shift-start__hours-card">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-        </svg>
-        <span id="sk-hours-reminder">Your shop closes at <strong>9:00 PM</strong></span>
-      </div>
-
-      <!-- Start Shift CTA -->
-      <button
-        class="btn-start-shift"
-        id="btn-start-shift"
-        aria-label="Start your shift and go online"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-          <path d="M5 3l14 9-14 9V3z"/>
-        </svg>
-        <span data-i18n="shift.start">Start Shift</span>
-      </button>
-
-      <!-- Setup link for new shopkeepers -->
-      <div class="shift-start__setup-prompt" id="shift-setup-prompt" style="display:none">
-        <p data-i18n="shift.newShop">New here? Set up your shop first.</p>
-        <a href="#section-setup" class="btn-link" data-i18n="shift.setupLink">Set up my shop →</a>
-      </div>
-
-      <!-- Footer links -->
-      <div class="shift-start__footer">
-        <a href="index.html" class="btn-link-muted" data-i18n="nav.backToHome">← Back to LocalBuy</a>
-      </div>
+<!-- ════════════════════════════════════════════════════════════════
+     CUSTOM MODAL/DIALOG COMPONENT
+     Replaces all native alert() / confirm() calls.
+     Controlled by showModal() / hideModal() in shopkeeper.js
+═══════════════════════════════════════════════════════════════════ -->
+<div id="app-modal-overlay"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="app-modal-title"
+     class="modal-overlay"
+     hidden>
+  <div class="modal-box">
+    <h3 id="app-modal-title" class="modal-title"></h3>
+    <p  id="app-modal-body"  class="modal-body"></p>
+    <div class="modal-actions">
+      <button id="app-modal-cancel" class="btn btn-ghost modal-btn"></button>
+      <button id="app-modal-confirm" class="btn btn-danger modal-btn"></button>
     </div>
   </div>
+</div>
 
+<!-- ════════════════════════════════════════════════════════════════
+     TOAST NOTIFICATION AREA
+     Used for brief success/warn/error messages (not blocking).
+═══════════════════════════════════════════════════════════════════ -->
+<div id="toast-container" aria-live="assertive" aria-atomic="true"></div>
 
-  <!-- ════════════════════════════════════════════════════════════════════════
-       SCREEN 2: MAIN DASHBOARD (#section-dashboard)
-       Active orders feed + stats + shift controls
-  ═════════════════════════════════════════════════════════════════════════ -->
-  <div data-sk-section="section-dashboard" id="section-dashboard" aria-label="Active dashboard">
+<!-- ════════════════════════════════════════════════════════════════
+     PAGE SHELL
+     All screens sit inside .page-shell
+═══════════════════════════════════════════════════════════════════ -->
+<div class="page-shell" id="app-root">
 
-    <!-- ── Top bar ──────────────────────────────────────────────────────── -->
-    <header class="sk-topbar" role="banner">
-      <div class="sk-topbar__left">
-        <!-- Shop name -->
-        <h1 class="sk-topbar__shop" id="sk-shop-name">Sharma General Store</h1>
+  <!-- ══════════════════════════════════════════════════════════
+       SCREEN 1: REGISTRATION / ONBOARDING
+       Shown to first-time shopkeepers (no lb_shop_id in localStorage).
+       After registration → shift-start screen.
+  ═══════════════════════════════════════════════════════════════ -->
+  <section id="screen-register" class="screen" data-screen="register" aria-label="Shop Registration">
 
-        <!-- Live status pill — tappable to toggle temporarily offline -->
-        <button
-          class="live-status-pill"
-          id="live-status-pill"
-          aria-label="Toggle shop online/offline status"
-          aria-pressed="true"
-        >
-          <span class="status-dot status-dot--green pulse" aria-hidden="true"></span>
-          <span class="live-status-pill__text" data-i18n="status.online">Online</span>
-        </button>
+    <!-- Back to landing -->
+    <div class="register-topbar">
+      <a href="index.html" class="back-link" aria-label="Back to home">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span data-i18n="nav.back">Back</span>
+      </a>
+      <!-- Language toggle -->
+      <div class="lang-toggle" role="group" aria-label="Language selector">
+        <button class="lang-btn active" data-lang="en" aria-pressed="true">EN</button>
+        <button class="lang-btn" data-lang="hi" aria-pressed="false">हि</button>
+        <button class="lang-btn" data-lang="bn" aria-pressed="false">বা</button>
+        <button class="lang-btn" data-lang="as" aria-pressed="false">অ</button>
+      </div>
+    </div>
+
+    <div class="register-hero">
+      <!-- Amber warm badge -->
+      <span class="eyebrow-badge amber" data-i18n="register.badge">For Guwahati shop owners</span>
+      <h1 class="register-headline font-display" data-i18n="register.headline">
+        List your shop.<br><em>It's free.</em>
+      </h1>
+      <p class="register-sub" data-i18n="register.sub">Takes 5 minutes. No tech knowledge needed.</p>
+
+      <!-- Benefits row -->
+      <ul class="benefit-list" role="list">
+        <li class="benefit-item">
+          <span class="benefit-icon" aria-hidden="true">🚫</span>
+          <div>
+            <strong data-i18n="benefit.noCommission.title">No commission for 3 months</strong>
+            <span data-i18n="benefit.noCommission.sub">Start earning, not paying</span>
+          </div>
+        </li>
+        <li class="benefit-item">
+          <span class="benefit-icon" aria-hidden="true">📱</span>
+          <div>
+            <strong data-i18n="benefit.anyPhone.title">Works on any Android phone</strong>
+            <span data-i18n="benefit.anyPhone.sub">No new hardware needed</span>
+          </div>
+        </li>
+        <li class="benefit-item">
+          <span class="benefit-icon" aria-hidden="true">📣</span>
+          <div>
+            <strong data-i18n="benefit.waKit.title">Free WhatsApp kit on day 1</strong>
+            <span data-i18n="benefit.waKit.sub">Ready-made messages for your regulars</span>
+          </div>
+        </li>
+        <li class="benefit-item">
+          <span class="benefit-icon" aria-hidden="true">⚡</span>
+          <div>
+            <strong data-i18n="benefit.setup.title">5-minute setup</strong>
+            <span data-i18n="benefit.setup.sub">We help you go live today</span>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Registration form card -->
+    <div id="section-register" class="register-card" role="form" aria-labelledby="form-heading">
+      <h2 id="form-heading" class="register-form-heading font-display" data-i18n="register.formHeading">
+        Set up your shop
+      </h2>
+
+      <!-- Shop name -->
+      <div class="field-group">
+        <label for="input-shop-name" class="field-label" data-i18n="form.shopName">Shop name</label>
+        <input type="text"
+               id="input-shop-name"
+               class="field-input"
+               autocomplete="organization"
+               placeholder="e.g., Sharma General Store"
+               maxlength="60"
+               required>
       </div>
 
-      <div class="sk-topbar__right">
-        <!-- End shift button -->
-        <button
-          class="btn-end-shift"
-          id="btn-end-shift"
-          aria-label="End your shift"
-          data-i18n="shift.end"
-        >
-          End Shift
+      <!-- Owner name -->
+      <div class="field-group">
+        <label for="input-owner-name" class="field-label" data-i18n="form.ownerName">Your name</label>
+        <input type="text"
+               id="input-owner-name"
+               class="field-input"
+               autocomplete="name"
+               placeholder="e.g., Rajesh Kalita"
+               maxlength="40"
+               required>
+      </div>
+
+      <!-- Category -->
+      <div class="field-group">
+        <label for="input-category" class="field-label" data-i18n="form.category">Shop category</label>
+        <select id="input-category" class="field-input field-select" required>
+          <option value="" disabled selected data-i18n="form.selectCategory">Select a category</option>
+          <option value="kirana"     data-i18n="cat.kirana">🛒 Kirana / General Store</option>
+          <option value="chemist"    data-i18n="cat.chemist">💊 Chemist / Medical</option>
+          <option value="stationery" data-i18n="cat.stationery">✏️ Stationery</option>
+          <option value="bakery"     data-i18n="cat.bakery">🎂 Bakery</option>
+          <option value="dairy"      data-i18n="cat.dairy">🥛 Dairy</option>
+          <option value="beauty"     data-i18n="cat.beauty">💄 Beauty</option>
+          <option value="fish"       data-i18n="cat.fish">🐟 Fish &amp; Meat</option>
+        </select>
+      </div>
+
+      <!-- Area / neighbourhood -->
+      <div class="field-group">
+        <label for="input-area" class="field-label" data-i18n="form.area">Neighbourhood / Area</label>
+        <input type="text"
+               id="input-area"
+               class="field-input"
+               list="area-suggestions"
+               placeholder="e.g., Fancy Bazar, Ulubari…"
+               maxlength="60"
+               required>
+        <datalist id="area-suggestions">
+          <option value="Fancy Bazar">
+          <option value="Pan Bazar">
+          <option value="Paltan Bazar">
+          <option value="Ulubari">
+          <option value="Silpukhuri">
+          <option value="Bhangagarh">
+          <option value="Christianbasti">
+          <option value="Ganeshguri">
+          <option value="Six Mile">
+        </datalist>
+      </div>
+
+      <!-- Phone -->
+      <div class="field-group">
+        <label for="input-phone" class="field-label" data-i18n="form.phone">WhatsApp number</label>
+        <!-- TODO: Customer phone numbers stored only in order objects.
+             Encrypt at rest in Firebase, never log to console in production. -->
+        <div class="input-prefix-wrap">
+          <span class="input-prefix-label">+91</span>
+          <input type="tel"
+                 id="input-phone"
+                 class="field-input input-prefixed"
+                 inputmode="numeric"
+                 pattern="[6-9][0-9]{9}"
+                 placeholder="9876543210"
+                 maxlength="10"
+                 required>
+        </div>
+        <span class="field-hint" data-i18n="form.phoneHint">We only use this to send you order alerts.</span>
+      </div>
+
+      <!-- Opening hours -->
+      <div class="field-group">
+        <label class="field-label" data-i18n="form.hours">Shop hours</label>
+        <div class="hours-row">
+          <div class="hours-col">
+            <label for="input-open-time" class="field-sub-label" data-i18n="form.opensAt">Opens at</label>
+            <input type="time" id="input-open-time"  class="field-input" value="08:00" required>
+          </div>
+          <div class="hours-col">
+            <label for="input-close-time" class="field-sub-label" data-i18n="form.closesAt">Closes at</label>
+            <input type="time" id="input-close-time" class="field-input" value="21:00" required>
+          </div>
+        </div>
+        <div class="hours-col" style="margin-top:10px;">
+          <label for="input-last-order" class="field-sub-label" data-i18n="form.lastOrder">Last order accepted at</label>
+          <input type="time" id="input-last-order" class="field-input" value="20:30" required>
+        </div>
+      </div>
+
+      <!-- UPI -->
+      <div class="field-group">
+        <label for="input-upi" class="field-label" data-i18n="form.upiId">UPI ID (optional)</label>
+        <!-- SECURITY NOTE: UPI VPA must be resolved server-side; never expose in frontend JS in production.
+             This field is collected here and sent to backend only.
+             TODO: On form submit, POST to /api/shop/register — never store UPI VPA in localStorage. -->
+        <input type="text"
+               id="input-upi"
+               class="field-input"
+               inputmode="email"
+               placeholder="yourshop@upi"
+               maxlength="50"
+               autocomplete="off">
+        <span class="field-hint" data-i18n="form.upiHint">Lets customers pay online. Safe &amp; optional.</span>
+      </div>
+
+      <!-- Submit -->
+      <button id="btn-register" class="btn btn-primary btn-block" type="button">
+        <span data-i18n="register.submit">Go live — it's free →</span>
+      </button>
+      <p class="register-legal" data-i18n="register.legal">
+        By continuing you agree to our <a href="#" class="link-muted">Terms</a>. No spam, ever.
+      </p>
+    </div>
+
+  </section><!-- /screen-register -->
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       SCREEN 2: SHIFT START
+       Shown after registration (or returning shopkeeper before starting shift).
+       Shopkeeper cannot see orders without starting shift.
+  ═══════════════════════════════════════════════════════════════ -->
+  <section id="screen-shift-start" class="screen" data-screen="shift-start" aria-label="Start your shift">
+
+    <div class="shift-start-wrap">
+
+      <!-- Header bar with language toggle -->
+      <div class="shift-topbar">
+        <div class="sk-logo">
+          <!-- Inline SVG hexagon logo mark -->
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <path d="M14 2L25.2 8.5V21.5L14 28L2.8 21.5V8.5L14 2Z" fill="var(--color-sage)"/>
+            <path d="M14 7L20.5 10.75V18.25L14 22L7.5 18.25V10.75L14 7Z" fill="white" opacity="0.3"/>
+          </svg>
+          <span class="logo-text"><span style="color:var(--color-ink)">Local</span><span style="color:var(--color-sage)">Buy</span></span>
+        </div>
+        <div class="lang-toggle" role="group" aria-label="Language selector">
+          <button class="lang-btn active" data-lang="en" aria-pressed="true">EN</button>
+          <button class="lang-btn" data-lang="hi" aria-pressed="false">हि</button>
+          <button class="lang-btn" data-lang="bn" aria-pressed="false">বা</button>
+          <button class="lang-btn" data-lang="as" aria-pressed="false">অ</button>
+        </div>
+      </div>
+
+      <!-- Greeting block -->
+      <div class="shift-greeting">
+        <p class="shift-greeting-text" id="shift-greeting-name">
+          <!-- JS sets: "Good morning, Rajesh 👋" -->
+          <span data-i18n="shift.greeting">Good morning</span> 👋
+        </p>
+        <h1 class="shift-shop-name font-display" id="shift-shop-name-display">
+          <!-- JS populates from localStorage -->
+          Sharma General Store
+        </h1>
+      </div>
+
+      <!-- Status pill: offline (before shift) -->
+      <div class="status-pill-lg offline" id="shift-status-pill" aria-live="polite">
+        <span class="status-dot-lg" aria-hidden="true"></span>
+        <span data-i18n="shift.offline">🔴 Offline — Shop is hidden from customers</span>
+      </div>
+
+      <!-- Stats from yesterday (if available) -->
+      <div class="yesterday-stats" id="yesterday-stats" aria-label="Yesterday's summary">
+        <span class="eyebrow-sm" data-i18n="shift.yesterday">Yesterday</span>
+        <div class="stats-row-sm">
+          <div class="stat-sm">
+            <strong id="stat-yesterday-orders">—</strong>
+            <span data-i18n="stats.orders">Orders</span>
+          </div>
+          <div class="stat-sm">
+            <strong id="stat-yesterday-earnings">—</strong>
+            <span data-i18n="stats.earnings">Earnings</span>
+          </div>
+          <div class="stat-sm">
+            <strong id="stat-yesterday-avgtime">—</strong>
+            <span data-i18n="stats.avgTime">Avg. ready</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main CTA: Start Shift -->
+      <button id="btn-start-shift" class="btn btn-start-shift" type="button" aria-describedby="shift-hint">
+        <span data-i18n="shift.start">Start Shift — Go Online</span>
+      </button>
+      <p id="shift-hint" class="shift-hint" data-i18n="shift.hint">
+        Your shop will become visible to customers in your area.
+      </p>
+
+      <!-- Opening hours reminder -->
+      <div class="shift-hours-reminder" id="shift-hours-reminder">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="8" cy="8" r="7" stroke="var(--color-muted)" stroke-width="1.5"/>
+          <path d="M8 4.5V8.5L10.5 10" stroke="var(--color-muted)" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span id="shift-hours-display" data-i18n="shift.hoursToday">Today: 8:00 AM – 9:00 PM</span>
+      </div>
+
+    </div><!-- /shift-start-wrap -->
+  </section><!-- /screen-shift-start -->
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       SCREEN 3: MAIN DASHBOARD
+       Active when shift is running.
+       Sub-sections managed by JS:
+         #panel-orders  (default)
+         #panel-inventory (quick OOS toggles)
+  ═══════════════════════════════════════════════════════════════ -->
+  <section id="screen-dashboard" class="screen" data-screen="dashboard" aria-label="Shop dashboard">
+
+    <!-- ── Top bar ─────────────────────────────────────────── -->
+    <header class="dashboard-topbar" role="banner">
+      <div class="topbar-left">
+        <p class="topbar-shop-name" id="dash-shop-name">Sharma General Store</p>
+        <!-- Live status toggle (tap to go temporarily offline) -->
+        <button class="status-pill-sm online"
+                id="dash-status-toggle"
+                aria-label="Shop status — tap to toggle"
+                aria-pressed="true"
+                role="switch">
+          <span class="status-dot-sm pulse" aria-hidden="true"></span>
+          <span id="dash-status-label" data-i18n="status.online">🟢 Online</span>
+        </button>
+      </div>
+      <div class="topbar-right">
+        <!-- Language toggle -->
+        <div class="lang-toggle compact" role="group" aria-label="Language selector">
+          <button class="lang-btn active" data-lang="en" aria-pressed="true">EN</button>
+          <button class="lang-btn" data-lang="hi" aria-pressed="false">हि</button>
+          <button class="lang-btn" data-lang="bn" aria-pressed="false">বা</button>
+          <button class="lang-btn" data-lang="as" aria-pressed="false">অ</button>
+        </div>
+        <!-- End shift -->
+        <button id="btn-end-shift" class="btn btn-end-shift" type="button">
+          <span data-i18n="shift.end">End Shift</span>
         </button>
       </div>
     </header>
 
-    <!-- ── Stats row ────────────────────────────────────────────────────── -->
-    <div class="stats-row" aria-label="Today's stats">
-      <div class="stat-cell">
-        <p class="stat-cell__value" id="stat-orders">0</p>
-        <p class="stat-cell__label" data-i18n="stats.ordersToday">Orders today</p>
+    <!-- ── Stats row ───────────────────────────────────────── -->
+    <div class="dashboard-stats" role="region" aria-label="Today's stats">
+      <div class="stat-card">
+        <strong class="stat-value" id="stat-orders-today">0</strong>
+        <span class="stat-label" data-i18n="stats.ordersToday">Orders today</span>
       </div>
-      <div class="stat-cell stat-cell--mid">
-        <p class="stat-cell__value" id="stat-earnings">₹0</p>
-        <p class="stat-cell__label" data-i18n="stats.earnings">Earnings today</p>
+      <div class="stat-card">
+        <strong class="stat-value" id="stat-earnings-today">₹0</strong>
+        <span class="stat-label" data-i18n="stats.earningsToday">Earnings today</span>
       </div>
-      <div class="stat-cell">
-        <p class="stat-cell__value" id="stat-avg-time">—</p>
-        <p class="stat-cell__label" data-i18n="stats.avgTime">Avg. ready time</p>
+      <div class="stat-card">
+        <strong class="stat-value" id="stat-avg-ready">— min</strong>
+        <span class="stat-label" data-i18n="stats.avgReady">Avg. ready time</span>
       </div>
     </div>
 
-    <!-- Shopkeeper alert banner (warning / info / error) -->
-    <div
-      class="sk-alert-banner"
-      id="sk-alert-banner"
-      role="alert"
-      aria-live="assertive"
-      style="display:none"
-    >
-      <svg class="sk-alert-banner__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
-      </svg>
-      <span class="sk-alert-banner__text" id="sk-alert-text"></span>
-      <button class="sk-alert-banner__dismiss" id="sk-alert-dismiss" aria-label="Dismiss alert">×</button>
-    </div>
-
-    <!-- Pull-to-refresh hint -->
-    <div class="pull-hint" id="pull-hint" aria-hidden="true">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
-      <span data-i18n="ui.pullRefresh">Pull to refresh</span>
-    </div>
-
-    <!-- ── Active orders feed ────────────────────────────────────────────── -->
-    <section class="orders-feed" aria-label="Active orders" aria-live="polite" id="orders-feed">
-
-      <div class="orders-feed__header">
-        <h2 class="orders-feed__title" data-i18n="orders.active">Active Orders</h2>
-        <span class="orders-count-badge" id="orders-count-badge" aria-label="Number of active orders">0</span>
-      </div>
-
-      <!-- Order cards injected here by shopkeeper.js -->
-      <div class="order-cards-list" id="order-cards-list">
-        <!-- Empty state -->
-        <div class="orders-empty" id="orders-empty" role="status">
-          <div class="orders-empty__icon" aria-hidden="true">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage-light)" stroke-width="1.5" stroke-linecap="round">
-              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
-              <rect x="9" y="3" width="6" height="4" rx="1"/>
-              <path d="M9 12h6M9 16h4"/>
-            </svg>
-          </div>
-          <p class="orders-empty__title" data-i18n="orders.emptyTitle">All clear!</p>
-          <p class="orders-empty__sub" data-i18n="orders.emptySub">No active orders right now. New orders will appear here.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Completed orders today (collapsed accordion) ─────────────────── -->
-    <section class="completed-orders" aria-label="Completed orders today">
-      <button
-        class="completed-toggle"
-        id="completed-toggle"
-        aria-expanded="false"
-        aria-controls="completed-list"
-      >
-        <span data-i18n="orders.completedToday">Completed today</span>
-        <span class="completed-count" id="completed-count">0</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    <!-- ── Dashboard nav tabs ─────────────────────────────── -->
+    <nav class="dashboard-tabs" role="tablist" aria-label="Dashboard sections">
+      <button class="dash-tab active"
+              role="tab"
+              id="tab-orders"
+              aria-selected="true"
+              aria-controls="panel-orders"
+              data-panel="orders">
+        <span data-i18n="tab.orders">Orders</span>
+        <span class="tab-badge" id="orders-count-badge" aria-label="Active orders">0</span>
       </button>
-      <div id="completed-list" class="completed-list" hidden>
-        <!-- Injected by JS -->
-      </div>
-    </section>
+      <button class="dash-tab"
+              role="tab"
+              id="tab-inventory"
+              aria-selected="false"
+              aria-controls="panel-inventory"
+              data-panel="inventory">
+        <span data-i18n="tab.inventory">Quick OOS</span>
+      </button>
+    </nav>
 
-    <!-- ── OOS (Out of Stock) quick-mark panel ──────────────────────────── -->
-    <section class="oos-panel" aria-label="Mark items as out of stock">
-      <div class="oos-panel__header">
-        <h2 class="oos-panel__title" data-i18n="oos.title">Out of Stock Today</h2>
-        <p class="oos-panel__sub" data-i18n="oos.sub">These will show automatically in your quotes</p>
-      </div>
-      <div class="oos-chips" id="oos-chips">
-        <!-- Common items as toggleable chips — JS manages state -->
-        <button class="oos-chip" data-item="tata-salt" aria-pressed="false" data-i18n="oos.tataSalt">Tata Salt</button>
-        <button class="oos-chip" data-item="amul-butter" aria-pressed="false" data-i18n="oos.amulButter">Amul Butter</button>
-        <button class="oos-chip" data-item="maggi" aria-pressed="false" data-i18n="oos.maggi">Maggi</button>
-        <button class="oos-chip" data-item="bread" aria-pressed="false" data-i18n="oos.bread">Bread</button>
-        <button class="oos-chip" data-item="eggs" aria-pressed="false" data-i18n="oos.eggs">Eggs</button>
-        <button class="oos-chip" data-item="milk" aria-pressed="false" data-i18n="oos.milk">Milk</button>
-        <button class="oos-chip" data-item="rice" aria-pressed="false" data-i18n="oos.rice">Rice</button>
-        <button class="oos-chip" data-item="atta" aria-pressed="false" data-i18n="oos.atta">Atta</button>
-      </div>
-    </section>
-  </div>
+    <!-- ── Panel: Active Orders ───────────────────────────── -->
+    <div id="panel-orders"
+         role="tabpanel"
+         aria-labelledby="tab-orders"
+         class="dashboard-panel active">
 
+      <!-- Screen-flash overlay for new order alert -->
+      <div id="flash-overlay" aria-hidden="true"></div>
 
-  <!-- ════════════════════════════════════════════════════════════════════════
-       ORDER ACTION PANEL — Full-screen bottom sheet
-       Opens when shopkeeper taps an order card.
-       role="dialog" with aria-modal — focus trapped when open.
-  ═════════════════════════════════════════════════════════════════════════ -->
-  <div
-    class="order-panel"
-    id="order-panel"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="order-panel-title"
-    tabindex="-1"
-    style="display:none"
-  >
-    <!-- Drag handle -->
-    <div class="order-panel__drag" aria-hidden="true"></div>
-
-    <!-- Panel header -->
-    <div class="order-panel__header">
-      <div class="order-panel__id-wrap">
-        <span class="order-panel__order-id" id="panel-order-id">LB-8472</span>
-        <span class="order-panel__status-badge" id="panel-status-badge" data-i18n="status.pending">Pending</span>
+      <!-- Shopkeeper system alert (closing-soon warning, etc.) -->
+      <div id="shopkeeper-alert" class="shopkeeper-alert" role="alert" aria-live="polite" hidden>
+        <span class="alert-icon" aria-hidden="true"></span>
+        <p class="alert-text"></p>
+        <button class="alert-dismiss" aria-label="Dismiss alert">✕</button>
       </div>
-      <button class="order-panel__close" id="order-panel-close" aria-label="Close order panel">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-          <path d="M18 6L6 18M6 6l12 12"/>
+
+      <!-- Pull-to-refresh hint -->
+      <div class="pull-hint" id="pull-hint" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M8 2V10M4 6L8 2L12 6" stroke="var(--color-sage)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-      </button>
-    </div>
-
-    <!-- Scrollable panel body -->
-    <div class="order-panel__body" id="order-panel-body">
-
-      <!-- ── Customer info (read-only) ───────────────────────────────────── -->
-      <div class="panel-customer">
-        <div class="panel-customer__row">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <span class="panel-customer__name" id="panel-customer-name">Priyanka B.</span>
-          <span class="panel-customer__time" id="panel-order-time">12:34 PM</span>
-        </div>
-        <div class="panel-customer__row">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          <span data-i18n="order.pickupBy">Pickup by:</span>
-          <strong id="panel-pickup-time">1:00 PM</strong>
-        </div>
-        <div class="panel-customer__row">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>
-          <span class="panel-payment-method" id="panel-payment-method" data-i18n="payment.pickup">Pay at pickup</span>
-        </div>
+        <span data-i18n="pull.refresh">Pull to refresh</span>
       </div>
 
-      <!-- ── Customer's order text (read-only) ─────────────────────────── -->
-      <div class="panel-order-text">
-        <label class="panel-label" data-i18n="order.customerList">Customer's order:</label>
-        <div class="panel-order-content" id="panel-order-content">
-          <!-- Full order text injected by JS -->
-        </div>
-      </div>
+      <!-- Orders feed -->
+      <div id="orders-feed"
+           class="orders-feed"
+           role="list"
+           aria-label="Active orders"
+           aria-live="polite">
 
-      <!-- ── Photo attachment (shown if customer uploaded photo) ────────── -->
-      <div class="panel-photo" id="panel-photo" style="display:none">
-        <label class="panel-label" data-i18n="order.photoList">Photo list:</label>
-        <img
-          id="panel-photo-img"
-          alt="Customer's handwritten order list"
-          class="panel-photo__img"
-          style="touch-action: pinch-zoom"
-          loading="lazy"
-        />
-      </div>
-
-      <!-- ── Customer's note (shown if present) ─────────────────────────── -->
-      <div class="panel-note" id="panel-note" style="display:none">
-        <label class="panel-label" data-i18n="order.note">Note from customer:</label>
-        <p class="panel-note__text" id="panel-note-text"></p>
-      </div>
-
-      <div class="panel-divider" aria-hidden="true"></div>
-
-      <!-- ── Shopkeeper response section ───────────────────────────────── -->
-      <div class="panel-response">
-        <h3 class="panel-response__title" data-i18n="order.yourResponse">Your Response</h3>
-
-        <!-- Bill entry -->
-        <div class="panel-field">
-          <label class="panel-label" for="bill-amount" data-i18n="order.totalBill">Total bill amount</label>
-          <div class="input-prefix">
-            <span class="input-prefix__symbol" aria-hidden="true">₹</span>
-            <input
-              type="number"
-              id="bill-amount"
-              class="input-prefix__input"
-              inputmode="decimal"
-              placeholder="0.00"
-              min="0"
-              step="0.50"
-              aria-label="Enter total bill amount in rupees"
-            />
-          </div>
+        <!-- Empty state (shown when no active orders) -->
+        <div class="orders-empty" id="orders-empty-state">
+          <div class="empty-icon" aria-hidden="true">📭</div>
+          <p class="empty-title font-display" data-i18n="orders.emptyTitle">No active orders</p>
+          <p class="empty-sub" data-i18n="orders.emptySub">New orders will appear here with a sound alert.</p>
         </div>
 
-        <!-- Substitution / OOS notes -->
-        <div class="panel-field">
-          <label class="panel-label" for="sub-notes" data-i18n="order.notes">Notes for customer <span class="optional">(optional)</span></label>
-          <textarea
-            id="sub-notes"
-            class="panel-textarea"
-            rows="4"
-            aria-label="Notes or substitutions for the customer"
-            data-i18n-placeholder="order.notesPlaceholder"
-            placeholder="e.g., No Tata Salt — added Captain Cook 1kg ✓&#10;Maggi not available today."
-          ></textarea>
-        </div>
+        <!-- ORDER CARDS are injected here by shopkeeper.js
+             Template structure (for reference):
 
-        <!-- Auto-inject OOS items (populated by OOS panel chips) -->
-        <div class="oos-auto-inject" id="oos-auto-inject" style="display:none">
-          <p class="oos-auto-inject__label">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-amber)" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-            <span data-i18n="oos.autoInject">OOS items added to notes automatically:</span>
-          </p>
-          <p class="oos-auto-inject__items" id="oos-auto-inject-items"></p>
-        </div>
-      </div>
+          <article class="order-card urgency-green" role="listitem" data-order-id="LB-8472" tabindex="0">
+            <div class="order-card-accent"></div>
+            <div class="order-card-header">
+              <span class="order-id">LB-8472</span>
+              <span class="order-customer">Priyanka B.</span>
+              <span class="order-time">12:34 PM</span>
+            </div>
+            <div class="order-card-meta">
+              <span class="payment-badge cash">Pay at pickup</span>
+              <span class="pickup-eta">Ready by 1:00 PM</span>
+            </div>
+            <p class="order-preview">"Tata Salt, Amul Butter, Maggi × 3…"</p>
+            <div class="order-card-footer">
+              <span class="order-status-badge pending">Pending Review</span>
+              <button class="btn btn-tap-manage" aria-label="Manage order LB-8472">
+                Tap to manage →
+              </button>
+            </div>
+          </article>
+        -->
 
-      <!-- ── Action buttons ────────────────────────────────────────────── -->
-      <div class="panel-actions">
+      </div><!-- /orders-feed -->
+    </div><!-- /panel-orders -->
 
-        <!-- 1. Send Quote — amber, full width -->
-        <button
-          class="btn-send-quote"
-          id="btn-send-quote"
-          aria-label="Send bill quote to customer"
-          data-i18n="action.sendQuote"
-        >
-          Send Quote
-        </button>
+    <!-- ── Panel: Quick OOS (Out-of-Stock) ───────────────── -->
+    <div id="panel-inventory"
+         role="tabpanel"
+         aria-labelledby="tab-inventory"
+         class="dashboard-panel"
+         hidden>
 
-        <!-- 2. Mark as Packing -->
-        <button
-          class="btn-packing"
-          id="btn-packing"
-          aria-label="Mark order as being packed"
-          data-i18n="action.packing"
-        >
-          Mark as Packing
-        </button>
-
-        <!-- 3. Ready for Pickup — oversized, sage -->
-        <button
-          class="btn-ready"
-          id="btn-ready"
-          aria-label="Mark order as ready for customer pickup"
-          data-i18n="action.ready"
-        >
-          Ready for Pickup 🎉
-        </button>
-
-        <!-- 4. Cancel — small red text link -->
-        <button
-          class="btn-cancel-sk"
-          id="btn-cancel-sk"
-          aria-label="Cancel this order"
-          data-i18n="action.cancel"
-        >
-          Cancel Order
+      <div class="oos-header">
+        <p class="oos-intro" data-i18n="oos.intro">
+          Mark items out of stock. This auto-notes your next quotes.
+        </p>
+        <button id="btn-clear-oos" class="btn btn-ghost-sm" type="button">
+          <span data-i18n="oos.clearAll">Clear all</span>
         </button>
       </div>
-    </div>
 
-    <!-- Confetti burst on "Ready" action (CSS-only) -->
-    <div class="confetti-container" id="sk-confetti" aria-hidden="true">
-      <div class="confetti-piece"></div>
-      <div class="confetti-piece"></div>
-      <div class="confetti-piece"></div>
-      <div class="confetti-piece"></div>
-      <div class="confetti-piece"></div>
-      <div class="confetti-piece"></div>
-    </div>
-  </div>
+      <!-- OOS chips — populated by shopkeeper.js from localStorage -->
+      <div id="oos-chips-grid" class="oos-chips-grid" role="group" aria-label="Out-of-stock items">
+        <!-- Chips rendered by JS. Format:
+          <button class="oos-chip" data-item="Tata Salt 1kg" aria-pressed="false">
+            Tata Salt 1kg
+          </button>
+        -->
+      </div>
 
-  <!-- Order panel backdrop -->
-  <div class="order-panel-backdrop" id="order-panel-backdrop" aria-hidden="true" style="display:none"></div>
+      <!-- Add custom OOS item -->
+      <div class="oos-add-row">
+        <input type="text"
+               id="oos-custom-input"
+               class="field-input"
+               placeholder="Add item…"
+               data-i18n-placeholder="oos.placeholder"
+               maxlength="50">
+        <button id="btn-oos-add" class="btn btn-amber-sm" type="button">
+          <span data-i18n="oos.add">+ Add</span>
+        </button>
+      </div>
+
+    </div><!-- /panel-inventory -->
+
+  </section><!-- /screen-dashboard -->
 
 
-  <!-- ════════════════════════════════════════════════════════════════════════
-       SCREEN 3: SHIFT END SUMMARY (#shift-end)
+  <!-- ══════════════════════════════════════════════════════════
+       SCREEN 4: SHIFT END / SUMMARY
        Shown when "End Shift" is confirmed or auto-close fires.
-  ═════════════════════════════════════════════════════════════════════════ -->
-  <div data-sk-section="shift-end" id="shift-end" aria-label="Shift summary">
-    <div class="shift-end__wrap">
+  ═══════════════════════════════════════════════════════════════ -->
+  <section id="screen-shift-end" class="screen" data-screen="shift-end" aria-label="Shift summary">
 
-      <!-- Header -->
-      <div class="shift-end__header">
-        <div class="shift-end__logo" aria-hidden="true">
-          <svg width="40" height="40" viewBox="0 0 28 28" fill="none">
-            <path d="M14 2L25.26 8.5V21.5L14 28L2.74 21.5V8.5L14 2Z" fill="var(--color-sage)"/>
-            <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <h2 class="shift-end__title" data-i18n="shift.endTitle">Shift Complete</h2>
-        <p class="shift-end__sub" data-i18n="shift.endSub">Your shop is now offline. Great work today!</p>
-      </div>
+    <div class="shift-end-wrap">
 
-      <!-- Offline status pill -->
-      <div class="shift-end__status" role="status" aria-live="polite">
-        <span class="status-dot status-dot--red" aria-hidden="true"></span>
-        <span data-i18n="shift.offline">Offline — Shop is hidden from customers</span>
-      </div>
+      <div class="shift-end-icon" aria-hidden="true">🌙</div>
+
+      <h2 class="shift-end-title font-display" data-i18n="shiftEnd.title">Shift complete!</h2>
+      <p class="shift-end-sub" data-i18n="shiftEnd.sub">
+        Your shop is now offline. See you tomorrow.
+      </p>
 
       <!-- Summary card -->
-      <div class="summary-end-card">
-        <h3 class="summary-end-card__title" data-i18n="shift.todaySummary">Today's Summary</h3>
-
-        <div class="summary-end-card__grid">
-          <div class="summary-stat">
-            <p class="summary-stat__value" id="end-orders">0</p>
-            <p class="summary-stat__label" data-i18n="stats.ordersCompleted">Orders completed</p>
-          </div>
-          <div class="summary-stat">
-            <p class="summary-stat__value" id="end-earnings">₹0</p>
-            <p class="summary-stat__label" data-i18n="stats.totalEarnings">Total earnings</p>
-          </div>
-          <div class="summary-stat">
-            <p class="summary-stat__value" id="end-avg-time">—</p>
-            <p class="summary-stat__label" data-i18n="stats.avgFulfillment">Avg. fulfillment time</p>
-          </div>
+      <div class="summary-card" role="region" aria-label="Shift summary">
+        <div class="summary-row">
+          <span class="summary-label" data-i18n="summary.ordersCompleted">Orders completed</span>
+          <strong class="summary-value" id="summary-orders">0</strong>
         </div>
-
-        <!-- Shift hours -->
-        <div class="summary-shift-hours">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          <span id="end-shift-hours">9:00 AM – 9:00 PM</span>
+        <div class="summary-divider" aria-hidden="true"></div>
+        <div class="summary-row">
+          <span class="summary-label" data-i18n="summary.earnings">Total earnings</span>
+          <strong class="summary-value highlight" id="summary-earnings">₹0</strong>
+        </div>
+        <div class="summary-divider" aria-hidden="true"></div>
+        <div class="summary-row">
+          <span class="summary-label" data-i18n="summary.avgTime">Avg. fulfillment time</span>
+          <strong class="summary-value" id="summary-avg-time">— min</strong>
+        </div>
+        <div class="summary-divider" aria-hidden="true"></div>
+        <div class="summary-row">
+          <span class="summary-label" data-i18n="summary.shiftDuration">Shift duration</span>
+          <strong class="summary-value" id="summary-duration">—</strong>
         </div>
       </div>
 
-      <!-- Pending orders warning (shown if any orders not resolved) -->
-      <div class="pending-warning" id="pending-warning" role="alert" style="display:none">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
-        <span id="pending-warning-text">
-          <!-- e.g., "2 orders are still pending. Contact customers directly." -->
-        </span>
+      <!-- Pending orders warning -->
+      <div class="pending-warning" id="pending-orders-warning" hidden role="alert">
+        <span aria-hidden="true">⚠️</span>
+        <p id="pending-warning-text" data-i18n="shiftEnd.pendingWarning">
+          Some orders are still pending. Contact customers directly.
+        </p>
       </div>
 
-      <!-- WhatsApp export button -->
-      <button
-        class="btn-wa-export"
-        id="btn-wa-export"
-        aria-label="Export summary to WhatsApp"
-        data-i18n="shift.exportWhatsApp"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" fill="var(--color-wa)"/>
-          <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2z" stroke="var(--color-wa)" stroke-width="1.5" fill="none"/>
+      <!-- WhatsApp export -->
+      <button id="btn-export-wa" class="btn btn-whatsapp" type="button">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M10 1.667C5.398 1.667 1.667 5.398 1.667 10c0 1.5.41 2.904 1.126 4.108L1.667 18.333l4.342-1.108A8.29 8.29 0 0010 18.333c4.602 0 8.333-3.731 8.333-8.333S14.602 1.667 10 1.667z" fill="var(--color-wa)"/>
+          <path d="M7.5 7.5c-.167-.417-.333-.425-.5-.433-.125-.008-.267-.008-.408-.008-.142 0-.375.05-.575.267C5.817 7.542 5 8.333 5 9.95c0 1.617 1.167 3.175 1.333 3.392.167.208 2.25 3.575 5.542 4.858 2.75 1.083 3.292.867 3.883.817.592-.05 1.917-.784 2.183-1.542.267-.758.267-1.408.183-1.542-.083-.133-.292-.208-.617-.358-.325-.15-1.917-.95-2.217-1.058-.3-.108-.517-.158-.733.158-.217.317-.833 1.059-.942 1.275-.108.217-.217.242-.542.092-.325-.15-1.375-.508-2.617-1.617-.967-.858-1.617-1.917-1.808-2.242-.192-.325-.017-.5.142-.658.142-.142.325-.375.483-.558.158-.183.208-.317.308-.525.1-.208.05-.392-.025-.542C8.333 9.25 7.667 7.917 7.5 7.5z" fill="white"/>
         </svg>
-        <span data-i18n="shift.exportWhatsApp">Export as WhatsApp message</span>
+        <span data-i18n="shiftEnd.exportWA">Export summary to WhatsApp</span>
       </button>
 
-      <!-- Start new shift -->
-      <button
-        class="btn-new-shift"
-        id="btn-new-shift"
-        aria-label="Start a new shift"
-        data-i18n="shift.startNew"
-      >
-        Start New Shift
+      <!-- Start new shift tomorrow -->
+      <button id="btn-new-shift" class="btn btn-primary btn-block" type="button">
+        <span data-i18n="shiftEnd.done">Done — see you tomorrow</span>
       </button>
 
-      <!-- Back to home -->
-      <a href="index.html" class="btn-link-muted" data-i18n="nav.backToHome">← Back to LocalBuy home</a>
+    </div><!-- /shift-end-wrap -->
+  </section><!-- /screen-shift-end -->
+
+</div><!-- /page-shell -->
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     ORDER ACTION PANEL (full-screen bottom sheet modal)
+     Opens when shopkeeper taps any order card.
+     role="dialog" aria-modal="true" for accessibility.
+═══════════════════════════════════════════════════════════════════ -->
+<div id="order-panel-overlay"
+     class="order-panel-overlay"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="order-panel-title"
+     hidden>
+
+  <!-- Drag handle -->
+  <div class="panel-drag-handle" aria-hidden="true"></div>
+
+  <!-- Panel content: scroll container -->
+  <div class="order-panel-content" id="order-panel-scroll">
+
+    <!-- Panel header -->
+    <div class="order-panel-header">
+      <div>
+        <h2 id="order-panel-title" class="panel-order-id font-display">LB-8472</h2>
+        <p class="panel-customer-meta" id="panel-customer-meta">Priyanka B. · 12:34 PM · Ready by 1:00 PM</p>
+      </div>
+      <button class="panel-close" id="btn-close-panel" aria-label="Close order panel">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+          <path d="M6 6L16 16M6 16L16 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
-  </div>
 
+    <!-- Customer's order (read-only) -->
+    <div class="panel-section" role="region" aria-label="Customer's order">
+      <p class="panel-section-eyebrow" data-i18n="panel.customerOrder">Customer's order</p>
 
-  <!-- ════════════════════════════════════════════════════════════════════════
-       SECTION: SHOP REGISTRATION (#section-setup)
-       New shopkeeper onboarding — accessible from shift start if no profile
-  ═════════════════════════════════════════════════════════════════════════ -->
-  <div data-sk-section="section-setup" id="section-setup" aria-label="Shop registration">
-    <div class="setup-wrap">
-      <div class="setup-header">
-        <button class="btn-icon-back" id="setup-back" aria-label="Back">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-        </button>
-        <h2 class="setup-header__title" data-i18n="setup.title">Set Up Your Shop</h2>
+      <!-- Text order -->
+      <div class="customer-order-text" id="panel-order-text">
+        <!-- JS populates with formatted item list -->
       </div>
 
-      <p class="setup-intro" data-i18n="setup.intro">Takes 5 minutes. No tech knowledge needed.</p>
-
-      <form class="setup-form" id="setup-form" novalidate>
-
-        <!-- Shop name -->
-        <div class="form-field">
-          <label class="form-label" for="setup-shop-name" data-i18n="setup.shopName">Shop name</label>
-          <input
-            type="text"
-            id="setup-shop-name"
-            class="form-input"
-            autocomplete="organization"
-            required
-            aria-required="true"
-            data-i18n-placeholder="setup.shopNamePlaceholder"
-            placeholder="e.g., Sharma General Store"
-          />
-        </div>
-
-        <!-- Owner name -->
-        <div class="form-field">
-          <label class="form-label" for="setup-owner-name" data-i18n="setup.ownerName">Your name</label>
-          <input
-            type="text"
-            id="setup-owner-name"
-            class="form-input"
-            autocomplete="name"
-            required
-            aria-required="true"
-            data-i18n-placeholder="setup.ownerNamePlaceholder"
-            placeholder="e.g., Rajesh Kalita"
-          />
-        </div>
-
-        <!-- Category -->
-        <div class="form-field">
-          <label class="form-label" for="setup-category" data-i18n="setup.category">Shop category</label>
-          <select id="setup-category" class="form-select" required aria-required="true">
-            <option value="" data-i18n="setup.selectCategory">Select category…</option>
-            <option value="kirana" data-i18n="category.kirana">🛒 Kirana</option>
-            <option value="chemist" data-i18n="category.chemist">💊 Chemist</option>
-            <option value="stationery" data-i18n="category.stationery">✏️ Stationery</option>
-            <option value="bakery" data-i18n="category.bakery">🎂 Bakery</option>
-            <option value="dairy" data-i18n="category.dairy">🥛 Dairy</option>
-            <option value="beauty" data-i18n="category.beauty">💄 Beauty</option>
-            <option value="fish" data-i18n="category.fish">🐟 Fish &amp; Meat</option>
-          </select>
-        </div>
-
-        <!-- Opening hours -->
-        <div class="form-field form-field--row">
-          <div class="form-field--half">
-            <label class="form-label" for="setup-open-time" data-i18n="setup.openTime">Opens at</label>
-            <input type="time" id="setup-open-time" class="form-input" value="08:00" required aria-required="true" />
-          </div>
-          <div class="form-field--half">
-            <label class="form-label" for="setup-close-time" data-i18n="setup.closeTime">Closes at</label>
-            <input type="time" id="setup-close-time" class="form-input" value="21:00" required aria-required="true" />
-          </div>
-        </div>
-
-        <!-- Last order buffer -->
-        <div class="form-field">
-          <label class="form-label" for="setup-last-order" data-i18n="setup.lastOrder">Last order accepted (mins before close)</label>
-          <input
-            type="number"
-            id="setup-last-order"
-            class="form-input"
-            value="30"
-            min="0"
-            max="120"
-            inputmode="numeric"
-            aria-label="Minutes before closing to accept last order"
-          />
-        </div>
-
-        <!-- UPI ID -->
-        <div class="form-field">
-          <label class="form-label" for="setup-upi" data-i18n="setup.upiId">
-            UPI ID (optional)
-            <!-- TODO: UPI VPA must be resolved server-side; never expose in frontend JS in production -->
-          </label>
-          <input
-            type="text"
-            id="setup-upi"
-            class="form-input"
-            inputmode="email"
-            autocomplete="off"
-            data-i18n-placeholder="setup.upiPlaceholder"
-            placeholder="yourname@upi"
-          />
-          <p class="form-hint" data-i18n="setup.upiHint">For UPI pre-payment from customers</p>
-        </div>
-
-        <!-- Neighbourhood / area -->
-        <div class="form-field">
-          <label class="form-label" for="setup-area" data-i18n="setup.area">Neighbourhood / area</label>
-          <select id="setup-area" class="form-select">
-            <option value="" data-i18n="setup.selectArea">Select area…</option>
-            <option value="fancy-bazar">Fancy Bazar</option>
-            <option value="pan-bazar">Pan Bazar</option>
-            <option value="paltan-bazar">Paltan Bazar</option>
-            <option value="ulubari">Ulubari</option>
-            <option value="silpukhuri">Silpukhuri</option>
-            <option value="six-mile">Six Mile</option>
-            <option value="geetanagar">Geetanagar</option>
-            <option value="dispur">Dispur</option>
-            <option value="christianbasti">Christian Basti</option>
-            <option value="rehabari">Rehabari</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-
-        <!-- Phone -->
-        <div class="form-field">
-          <label class="form-label" for="setup-phone" data-i18n="setup.phone">Mobile number</label>
-          <div class="phone-input-wrap">
-            <span class="phone-prefix">+91</span>
-            <input
-              type="tel"
-              id="setup-phone"
-              class="phone-input"
-              placeholder="98765 43210"
-              maxlength="10"
-              inputmode="numeric"
-              pattern="[0-9]{10}"
-              required
-              aria-required="true"
-              autocomplete="tel-national"
-            />
-          </div>
-        </div>
-
-        <!-- Optional shop announcement -->
-        <div class="form-field">
-          <label class="form-label" for="setup-announcement" data-i18n="setup.announcement">
-            Shop announcement <span class="optional" data-i18n="optional">(optional)</span>
-          </label>
-          <input
-            type="text"
-            id="setup-announcement"
-            class="form-input"
-            maxlength="120"
-            data-i18n-placeholder="setup.announcementPlaceholder"
-            placeholder="e.g., 🎉 Fresh momo every Saturday morning!"
-          />
-        </div>
-
-        <!-- Save button -->
-        <button
-          type="button"
-          class="btn-save-setup"
-          id="btn-save-setup"
-          data-i18n="setup.save"
-          aria-label="Save shop profile"
-        >
-          Save &amp; Go Live
-        </button>
-      </form>
-    </div>
-  </div>
-
-
-  <!-- ════════════════════════════════════════════════════════════════════════
-       CUSTOM MODAL — Replaces all confirm() dialogs
-       Used for: end shift, cancel order, toggle offline confirmations
-  ═════════════════════════════════════════════════════════════════════════ -->
-  <div
-    class="custom-modal"
-    id="sk-custom-modal"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="sk-modal-title"
-    tabindex="-1"
-    style="display:none"
-  >
-    <div class="custom-modal__box">
-      <h3 class="custom-modal__title" id="sk-modal-title"></h3>
-      <p class="custom-modal__body" id="sk-modal-body"></p>
-      <div class="custom-modal__actions">
-        <button class="btn-modal-cancel" id="sk-modal-cancel" data-i18n="modal.cancel">Cancel</button>
-        <button class="btn-modal-confirm" id="sk-modal-confirm" data-i18n="modal.confirm">Confirm</button>
+      <!-- Photo attachment (if any) -->
+      <div id="panel-photo-wrap" class="panel-photo-wrap" hidden>
+        <p class="panel-section-eyebrow" data-i18n="panel.photoList" style="margin-top:12px;">Photo list</p>
+        <img id="panel-order-photo"
+             src=""
+             alt="Customer's handwritten order list"
+             class="panel-order-photo"
+             loading="lazy"
+             width="480"
+             height="320"
+             style="touch-action: pinch-zoom;">
       </div>
     </div>
-  </div>
-  <div class="custom-modal-backdrop" id="sk-modal-backdrop" style="display:none" aria-hidden="true"></div>
+
+    <!-- Payment info -->
+    <div class="panel-section payment-info-block" id="panel-payment-info">
+      <!-- JS injects: "Pay at pickup · Cash/UPI" or "Paid online · UPI ✓" -->
+    </div>
+
+    <!-- ── Shopkeeper response section ────────────────────── -->
+    <div class="panel-section" role="region" aria-label="Your response">
+      <p class="panel-section-eyebrow" data-i18n="panel.yourResponse">Your response</p>
+
+      <!-- Bill amount -->
+      <div class="field-group">
+        <label for="bill-amount" class="field-label" data-i18n="panel.billAmount">Total bill amount</label>
+        <div class="input-prefix-wrap">
+          <span class="input-prefix-label">₹</span>
+          <input type="number"
+                 id="bill-amount"
+                 class="field-input input-prefixed"
+                 inputmode="decimal"
+                 placeholder="0.00"
+                 min="0"
+                 step="0.50">
+        </div>
+      </div>
+
+      <!-- Substitution / OOS notes -->
+      <div class="field-group">
+        <label for="sub-notes" class="field-label" data-i18n="panel.subNotes">Notes for customer (optional)</label>
+        <textarea id="sub-notes"
+                  class="field-textarea"
+                  rows="3"
+                  data-i18n-placeholder="panel.subNotesPlaceholder"
+                  placeholder="e.g., No Tata Salt — added Captain Cook 1kg ✓&#10;Maggi not available today."></textarea>
+      </div>
+
+      <!-- Quick OOS toggle chips (pulled from inventory panel state) -->
+      <div class="quick-oos-chips" id="panel-quick-oos" role="group" aria-label="Quick out-of-stock">
+        <p class="field-label" data-i18n="panel.quickOos">Quick OOS this order</p>
+        <div id="panel-oos-chips">
+          <!-- Chips injected from shift OOS list by shopkeeper.js -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Action buttons ─────────────────────────────────── -->
+    <div class="panel-actions" role="group" aria-label="Order actions">
+
+      <!-- 1. Send Quote -->
+      <button id="btn-send-quote" class="btn btn-amber btn-block" type="button">
+        <span data-i18n="panel.sendQuote">Send Quote to Customer</span>
+      </button>
+
+      <!-- 2. Mark as Packing -->
+      <button id="btn-mark-packing" class="btn btn-sage-outline btn-block" type="button">
+        <span data-i18n="panel.markPacking">Mark as Packing</span>
+      </button>
+
+      <!-- 3. Ready for Pickup — oversized, most important action -->
+      <button id="btn-mark-ready" class="btn btn-ready btn-block" type="button">
+        <span data-i18n="panel.markReady">Ready for Pickup 🎉</span>
+      </button>
+
+      <!-- 4. Cancel — destructive, visually de-emphasised -->
+      <button id="btn-cancel-order" class="btn btn-cancel-link" type="button">
+        <span data-i18n="panel.cancelOrder">Cancel order</span>
+      </button>
+
+    </div><!-- /panel-actions -->
+
+    <!-- Confetti burst container (CSS-only, triggered by .confetti-active class) -->
+    <div class="confetti-burst" id="confetti-burst" aria-hidden="true">
+      <!-- 12 confetti pieces generated by JS (createElement) so reduced-motion is respected -->
+    </div>
+
+  </div><!-- /order-panel-content -->
+</div><!-- /order-panel-overlay -->
 
 
-  <!-- ════════════════════════════════════════════════════════════════════════
-       MOCK INCOMING ORDER SIMULATOR — DEV TOOL (remove in production)
-       Simulates new order arriving while dashboard is open for testing.
-  ═════════════════════════════════════════════════════════════════════════ -->
-  <div class="dev-toolbar" id="dev-toolbar" aria-label="Development tools">
-    <button class="dev-btn" id="dev-simulate-order" aria-label="Simulate new order (dev)">
-      + Simulate Order
-    </button>
-    <button class="dev-btn dev-btn--ghost" id="dev-hide-toolbar" aria-label="Hide developer toolbar">
-      Hide
-    </button>
-  </div>
+<!-- ════════════════════════════════════════════════════════════════
+     INLINE STYLES: Dashboard + Shopkeeper-specific
+     These are here because shopkeeper.css is loaded externally.
+     If shopkeeper.css doesn't exist yet, this block keeps things working.
+     Remove this block once shopkeeper.css is complete.
+═══════════════════════════════════════════════════════════════════ -->
+<style>
+/* ── LAYOUT ─────────────────────────────────────────────────── */
+.screen { background: var(--color-amber-light, #fffbf0); }
 
-  <!-- New order flash overlay (brief white flash when new order arrives) -->
-  <div class="flash-overlay" id="flash-overlay" aria-hidden="true" style="display:none"></div>
+/* ── TOPBAR ─────────────────────────────────────────────────── */
+.register-topbar,
+.shift-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 8px;
+}
+.back-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+.sk-logo { display: flex; align-items: center; gap: 8px; }
+.logo-text { font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 18px; }
+
+/* ── LANGUAGE TOGGLE ───────────────────────────────────────── */
+.lang-toggle {
+  display: flex;
+  gap: 2px;
+  background: rgba(15,92,58,0.08);
+  border-radius: 20px;
+  padding: 3px;
+}
+.lang-toggle.compact { gap: 1px; padding: 2px; }
+.lang-btn {
+  background: transparent;
+  border: none;
+  border-radius: 16px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-muted);
+  cursor: pointer;
+  min-height: 28px;
+  min-width: 32px;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.lang-btn.active {
+  background: var(--color-sage);
+  color: white;
+}
+.lang-btn:hover:not(.active) { background: var(--color-sage-light); color: var(--color-sage); }
+
+/* ── REGISTRATION HERO ─────────────────────────────────────── */
+.register-hero {
+  padding: 24px 20px 8px;
+  background: linear-gradient(135deg, #fffbf0 0%, #fef3c7 100%);
+}
+.eyebrow-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 20px;
+  padding: 4px 12px;
+  margin-bottom: 12px;
+}
+.eyebrow-badge.amber { background: #fef3c7; color: var(--color-amber); }
+.register-headline { font-size: 32px; line-height: 1.15; margin-bottom: 8px; }
+.register-headline em { color: var(--color-sage); font-style: italic; }
+.register-sub { font-size: 15px; color: var(--color-muted); margin-bottom: 20px; }
+
+/* ── BENEFIT LIST ──────────────────────────────────────────── */
+.benefit-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+.benefit-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: white;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  box-shadow: 0 1px 4px rgba(15,92,58,0.06);
+}
+.benefit-icon { font-size: 20px; line-height: 1; flex-shrink: 0; padding-top: 2px; }
+.benefit-item strong { display: block; font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.benefit-item span { font-size: 12px; color: var(--color-muted); }
+
+/* ── REGISTRATION CARD ─────────────────────────────────────── */
+.register-card {
+  background: white;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  margin-top: 16px;
+  padding: 28px 20px 48px;
+  box-shadow: 0 -4px 20px rgba(15,92,58,0.08);
+}
+.register-form-heading { font-size: 22px; margin-bottom: 20px; }
+
+/* ── FORM FIELDS ───────────────────────────────────────────── */
+.field-group { margin-bottom: 18px; }
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink);
+  margin-bottom: 6px;
+}
+.field-sub-label { display: block; font-size: 12px; color: var(--color-muted); margin-bottom: 4px; }
+.field-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: var(--radius-sm);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  color: var(--color-ink);
+  background: var(--color-surface);
+  transition: border-color var(--transition-fast);
+  min-height: 44px;
+}
+.field-input:focus { border-color: var(--color-sage); background: white; outline: 2px solid var(--color-sage); outline-offset: 1px; }
+.field-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+.field-textarea { resize: vertical; min-height: 80px; padding: 10px 14px; width: 100%; border: 1.5px solid #e5e7eb; border-radius: var(--radius-sm); font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--color-ink); background: var(--color-surface); transition: border-color var(--transition-fast); }
+.field-textarea:focus { border-color: var(--color-sage); background: white; outline: 2px solid var(--color-sage); outline-offset: 1px; }
+.field-hint { display: block; font-size: 12px; color: var(--color-muted); margin-top: 4px; }
+.input-prefix-wrap { display: flex; align-items: center; border: 1.5px solid #e5e7eb; border-radius: var(--radius-sm); overflow: hidden; background: var(--color-surface); }
+.input-prefix-wrap:focus-within { border-color: var(--color-sage); background: white; }
+.input-prefix-label { padding: 0 12px; font-size: 15px; font-weight: 600; color: var(--color-muted); border-right: 1.5px solid #e5e7eb; background: #f3f4f6; height: 44px; display: flex; align-items: center; }
+.input-prefixed { border: none; border-radius: 0; background: transparent; flex: 1; }
+.input-prefixed:focus { outline: none; }
+.hours-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hours-col { display: flex; flex-direction: column; }
+
+/* ── BUTTONS ───────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 12px 20px;
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  text-decoration: none;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--color-sage); color: white; }
+.btn-primary:hover { background: var(--color-sage-mid); }
+.btn-block { width: 100%; font-size: 16px; padding: 16px; }
+.btn-ghost { background: transparent; border: 1.5px solid #e5e7eb; color: var(--color-ink); }
+.btn-ghost:hover { border-color: var(--color-sage); color: var(--color-sage); }
+.btn-ghost-sm { background: transparent; border: 1.5px solid #e5e7eb; color: var(--color-muted); font-size: 13px; padding: 6px 12px; min-height: 32px; border-radius: 20px; }
+.btn-danger { background: #dc2626; color: white; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-amber { background: var(--color-amber); color: white; }
+.btn-amber:hover { background: #b45309; }
+.btn-amber-sm { background: var(--color-amber); color: white; font-size: 13px; padding: 8px 14px; min-height: 36px; border-radius: var(--radius-sm); }
+.btn-sage-outline { background: transparent; border: 2px solid var(--color-sage); color: var(--color-sage); }
+.btn-sage-outline:hover { background: var(--color-sage-light); }
+.btn-ready {
+  background: var(--color-sage);
+  color: white;
+  min-height: 64px;
+  font-size: 20px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(15,92,58,0.25);
+}
+.btn-ready:hover { background: var(--color-sage-mid); box-shadow: 0 6px 24px rgba(15,92,58,0.35); }
+.btn-cancel-link { background: transparent; color: var(--color-closed, #dc2626); font-size: 14px; font-weight: 500; text-decoration: underline; min-height: 44px; }
+.btn-end-shift { background: transparent; border: 1.5px solid #dc2626; color: #dc2626; font-size: 13px; padding: 6px 12px; min-height: 36px; border-radius: var(--radius-sm); }
+.btn-end-shift:hover { background: #fee2e2; }
+.btn-start-shift {
+  display: block;
+  width: 100%;
+  background: var(--color-sage);
+  color: white;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 20px;
+  cursor: pointer;
+  box-shadow: 0 8px 32px rgba(15,92,58,0.25);
+  transition: all var(--transition-mid);
+  min-height: 64px;
+  margin: 0 20px 12px;
+  width: calc(100% - 40px);
+}
+.btn-start-shift:hover { background: var(--color-sage-mid); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(15,92,58,0.35); }
+.btn-whatsapp { background: #25d366; color: white; border-radius: var(--radius-md); }
+.btn-whatsapp:hover { background: #128c7e; }
+.register-legal { font-size: 12px; color: var(--color-muted); text-align: center; margin-top: 12px; }
+.link-muted { color: var(--color-muted); }
+
+/* ── SHIFT START SCREEN ────────────────────────────────────── */
+.shift-start-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding-bottom: 48px;
+}
+.shift-greeting { padding: 24px 20px 8px; }
+.shift-greeting-text { font-size: 16px; color: var(--color-muted); margin-bottom: 4px; }
+.shift-shop-name { font-size: 28px; color: var(--color-ink); }
+
+/* ── STATUS PILLS ──────────────────────────────────────────── */
+.status-pill-lg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 20px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 600;
+  transition: background var(--transition-mid), color var(--transition-mid);
+}
+.status-pill-lg.offline { background: #fee2e2; color: #b91c1c; }
+.status-pill-lg.online { background: var(--color-sage-light); color: var(--color-sage); }
+.status-dot-lg { width: 12px; height: 12px; border-radius: 50%; background: currentColor; }
+
+.status-pill-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  min-height: 28px;
+  transition: all var(--transition-fast);
+}
+.status-pill-sm.online { background: var(--color-sage-light); color: var(--color-sage); }
+.status-pill-sm.offline { background: #fee2e2; color: #dc2626; }
+.status-dot-sm { width: 8px; height: 8px; border-radius: 50%; background: var(--status-open); }
+
+/* ── SHIFT HINT / HOURS ─────────────────────────────────────── */
+.shift-hint { font-size: 13px; color: var(--color-muted); text-align: center; padding: 0 20px 20px; }
+.shift-hours-reminder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 20px 0;
+  padding: 12px 16px;
+  background: rgba(15,92,58,0.05);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+/* ── YESTERDAY STATS ──────────────────────────────────────── */
+.yesterday-stats { margin: 0 20px 20px; padding: 16px; background: white; border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.eyebrow-sm { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); display: block; margin-bottom: 10px; }
+.stats-row-sm { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat-sm { text-align: center; }
+.stat-sm strong { display: block; font-size: 18px; font-weight: 700; color: var(--color-ink); }
+.stat-sm span { font-size: 11px; color: var(--color-muted); }
+
+/* ── DASHBOARD TOP BAR ─────────────────────────────────────── */
+.dashboard-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  gap: 8px;
+}
+.topbar-left { display: flex; flex-direction: column; gap: 4px; }
+.topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.topbar-shop-name { font-size: 14px; font-weight: 700; color: var(--color-ink); }
+
+/* ── DASHBOARD STATS ───────────────────────────────────────── */
+.dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  background: var(--color-amber-light);
+  border-bottom: 1px solid #e5e7eb;
+}
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 8px;
+  border-right: 1px solid #e5e7eb;
+  text-align: center;
+}
+.stat-card:last-child { border-right: none; }
+.stat-value { font-size: 20px; font-weight: 700; color: var(--color-ink); font-family: 'Fraunces', serif; }
+.stat-label { font-size: 11px; color: var(--color-muted); margin-top: 2px; }
+
+/* ── DASHBOARD TABS ─────────────────────────────────────────── */
+.dashboard-tabs {
+  display: flex;
+  background: white;
+  border-bottom: 2px solid #e5e7eb;
+  position: sticky;
+  top: 61px;
+  z-index: 9;
+}
+.dash-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+  min-height: 44px;
+}
+.dash-tab.active { color: var(--color-sage); border-bottom-color: var(--color-sage); }
+.tab-badge {
+  background: var(--color-amber);
+  color: white;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  min-width: 20px;
+  text-align: center;
+}
+
+/* ── DASHBOARD PANELS ──────────────────────────────────────── */
+.dashboard-panel { padding-bottom: 80px; }
+.dashboard-panel[hidden] { display: none; }
+
+/* ── FLASH OVERLAY ─────────────────────────────────────────── */
+#flash-overlay {
+  position: fixed;
+  inset: 0;
+  background: white;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 100;
+  transition: opacity 300ms ease;
+}
+#flash-overlay.flash-active { animation: flash-in 300ms ease forwards; }
+
+/* ── SHOPKEEPER ALERT BANNER ───────────────────────────────── */
+.shopkeeper-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+}
+.shopkeeper-alert.warn { background: #fef3c7; color: #92400e; border-left: 3px solid var(--color-amber); }
+.shopkeeper-alert.error { background: #fee2e2; color: #991b1b; border-left: 3px solid #dc2626; }
+.shopkeeper-alert.info { background: var(--color-sage-light); color: var(--color-sage); border-left: 3px solid var(--color-sage); }
+.alert-dismiss { margin-left: auto; background: none; border: none; font-size: 16px; cursor: pointer; color: currentColor; min-height: 28px; min-width: 28px; }
+
+/* ── PULL TO REFRESH HINT ──────────────────────────────────── */
+.pull-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--color-sage);
+  opacity: 0;
+  transition: opacity var(--transition-mid);
+}
+.pull-hint.visible { opacity: 1; }
+
+/* ── ORDER CARDS ───────────────────────────────────────────── */
+.orders-feed { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.orders-empty { text-align: center; padding: 60px 24px; }
+.empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-title { font-size: 20px; color: var(--color-ink); margin-bottom: 8px; }
+.empty-sub { font-size: 14px; color: var(--color-muted); }
+
+.order-card {
+  background: white;
+  border-radius: var(--radius-md);
+  padding: 14px 14px 14px 18px;
+  box-shadow: var(--shadow-card);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  border-left: 4px solid transparent;
+}
+.order-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(15,92,58,0.12); }
+.order-card:focus-visible { outline: 2px solid var(--color-sage); outline-offset: 2px; }
+
+/* Urgency colours */
+.urgency-green { border-left-color: var(--status-open); }
+.urgency-amber { border-left-color: var(--color-amber); background: linear-gradient(to right, #fffbf0, white 60%); }
+.urgency-red { border-left-color: var(--status-closed); background: linear-gradient(to right, #fff5f5, white 60%); }
+
+.order-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.order-id { font-family: 'Fraunces', serif; font-weight: 700; font-size: 16px; color: var(--color-ink); }
+.order-customer { font-size: 14px; font-weight: 600; color: var(--color-ink); flex: 1; }
+.order-time { font-size: 12px; color: var(--color-muted); }
+.order-card-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.payment-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; }
+.payment-badge.cash { background: var(--color-sage-light); color: var(--color-sage); }
+.payment-badge.upi { background: #ede9f8; color: var(--color-upi); }
+.pickup-eta { font-size: 12px; color: var(--color-muted); }
+.order-preview { font-size: 13px; color: var(--color-muted); margin-bottom: 10px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.order-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.order-status-badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; }
+.order-status-badge.pending { background: #fef3c7; color: #92400e; }
+.order-status-badge.quoted { background: #ede9f8; color: var(--color-upi); }
+.order-status-badge.packing { background: var(--color-sage-light); color: var(--color-sage); }
+.order-status-badge.ready { background: var(--color-sage); color: white; }
+.btn-tap-manage { background: transparent; border: none; font-size: 13px; font-weight: 600; color: var(--color-sage); cursor: pointer; padding: 4px 0; min-height: 32px; text-decoration: underline; }
+
+/* ── OOS PANEL ──────────────────────────────────────────────── */
+.oos-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px; }
+.oos-intro { font-size: 13px; color: var(--color-muted); max-width: 260px; }
+.oos-chips-grid { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
+.oos-chip {
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 1.5px solid #e5e7eb;
+  background: white;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink);
+  cursor: pointer;
+  min-height: 36px;
+  transition: all var(--transition-fast);
+}
+.oos-chip[aria-pressed="true"] { background: #fee2e2; border-color: #dc2626; color: #dc2626; text-decoration: line-through; }
+.oos-chip:hover { border-color: var(--color-sage); color: var(--color-sage); }
+.oos-add-row { display: flex; gap: 8px; padding: 12px 16px; }
+.oos-add-row .field-input { flex: 1; }
+
+/* ── ORDER ACTION PANEL ─────────────────────────────────────── */
+.order-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: rgba(17,24,39,0.5);
+  backdrop-filter: blur(4px);
+}
+.order-panel-overlay[hidden] { display: none; }
+.order-panel-content {
+  background: white;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  max-height: 90dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-shadow: var(--shadow-modal);
+  animation: slideUp 300ms ease forwards;
+}
+.panel-drag-handle {
+  width: 40px;
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  margin: -28px auto 20px;
+  position: relative;
+  z-index: 1;
+}
+.order-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 20px 0;
+  margin-bottom: 4px;
+}
+.panel-order-id { font-size: 24px; color: var(--color-ink); }
+.panel-customer-meta { font-size: 13px; color: var(--color-muted); margin-top: 2px; }
+.panel-close { background: none; border: none; color: var(--color-muted); cursor: pointer; padding: 4px; min-height: 32px; min-width: 32px; }
+.panel-section { padding: 16px 20px; border-bottom: 1px solid #f3f4f6; }
+.panel-section:last-child { border-bottom: none; }
+.panel-section-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 10px; }
+.customer-order-text { font-size: 15px; line-height: 1.6; color: var(--color-ink); white-space: pre-line; background: var(--color-surface); padding: 12px 14px; border-radius: var(--radius-sm); }
+.panel-photo-wrap img { width: 100%; border-radius: var(--radius-sm); object-fit: cover; }
+.payment-info-block { font-size: 14px; color: var(--color-muted); }
+.panel-actions { padding: 16px 20px 40px; display: flex; flex-direction: column; gap: 10px; }
+
+/* Quick OOS chips in panel */
+.quick-oos-chips { margin-top: 12px; }
+#panel-oos-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* ── CONFETTI ──────────────────────────────────────────────── */
+.confetti-burst { position: fixed; inset: 0; pointer-events: none; z-index: 999; overflow: hidden; }
+.confetti-piece {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  opacity: 0;
+}
+
+/* ── SHIFT END ──────────────────────────────────────────────── */
+.shift-end-wrap { display: flex; flex-direction: column; align-items: center; padding: 60px 24px 48px; min-height: 100dvh; }
+.shift-end-icon { font-size: 64px; margin-bottom: 20px; }
+.shift-end-title { font-size: 32px; text-align: center; margin-bottom: 8px; }
+.shift-end-sub { font-size: 15px; color: var(--color-muted); text-align: center; margin-bottom: 32px; }
+.summary-card { width: 100%; background: white; border-radius: var(--radius-md); box-shadow: var(--shadow-card); overflow: hidden; margin-bottom: 20px; }
+.summary-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; }
+.summary-label { font-size: 14px; color: var(--color-muted); }
+.summary-value { font-size: 20px; font-weight: 700; font-family: 'Fraunces', serif; }
+.summary-value.highlight { color: var(--color-sage); }
+.summary-divider { height: 1px; background: #f3f4f6; }
+.pending-warning { width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; background: #fef3c7; border-radius: var(--radius-sm); margin-bottom: 20px; font-size: 14px; color: #92400e; }
+.shift-end-wrap .btn { width: 100%; margin-bottom: 12px; }
+
+/* ── MODALS ─────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17,24,39,0.5);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(4px);
+}
+.modal-overlay[hidden] { display: none; }
+.modal-box { background: white; border-radius: var(--radius-lg); padding: 28px 24px; max-width: 380px; width: 100%; box-shadow: 0 20px 60px rgba(17,24,39,0.25); }
+.modal-title { font-size: 20px; font-family: 'Fraunces', serif; margin-bottom: 10px; }
+.modal-body { font-size: 15px; color: var(--color-muted); margin-bottom: 24px; line-height: 1.5; }
+.modal-actions { display: flex; gap: 10px; }
+.modal-btn { flex: 1; }
+
+/* ── TOAST ──────────────────────────────────────────────────── */
+#toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 400; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toast {
+  background: var(--color-ink);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 20px;
+  border-radius: 24px;
+  box-shadow: 0 4px 16px rgba(17,24,39,0.25);
+  animation: fadeUp 300ms ease forwards;
+  pointer-events: auto;
+  max-width: 320px;
+  text-align: center;
+}
+.toast.success { background: var(--color-sage); }
+.toast.warn { background: var(--color-amber); }
+.toast.error { background: #dc2626; }
+
+/* ── ANIMATIONS ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes flash-in {
+    0%   { opacity: 0.8; }
+    100% { opacity: 0; }
+  }
+  @keyframes pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.5); }
+    50%       { box-shadow: 0 0 0 6px rgba(22,163,74,0); }
+  }
+  @keyframes confetti-fall {
+    0%   { opacity: 1; transform: translateY(-10px) rotate(0deg); }
+    100% { opacity: 0; transform: translateY(110vh) rotate(720deg); }
+  }
+
+  .status-dot-sm.pulse { animation: pulse-dot 2s ease infinite; }
+  .order-card { animation: fadeUp 300ms ease both; }
+
+  .confetti-active .confetti-piece { animation: confetti-fall 1.2s ease forwards; }
+}
+
+/* Reduced motion: disable all animations */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
 
 
-  <!-- ════════════════════════════════════════════════════════════════════════
-       SCRIPTS — all deferred, at end of body
-  ═════════════════════════════════════════════════════════════════════════ -->
-  <script src="js/i18n.js" defer></script>
-  <script src="js/geo.js" defer></script>
-  <script src="js/db-bridge.js" defer></script>
-  <script src="js/notifications.js" defer></script>
-  <script src="js/app.js" defer></script>
-  <script src="js/shopkeeper.js" defer></script>
-  <script src="js/sw-register.js" defer></script>
+<!-- ════════════════════════════════════════════════════════════════
+     JS MODULES — all deferred, loaded at end of body
+     Order matters: i18n → db-bridge → geo → notifications → upi
+     → shopkeeper (main logic)
+     → sw-register (last — non-critical)
+═══════════════════════════════════════════════════════════════════ -->
 
-  <script>
-    // Bootstrap shopkeeper SPA after deferred scripts load
-    document.addEventListener('DOMContentLoaded', () => {
-      if (window.ShopkeeperApp && typeof window.ShopkeeperApp.init === 'function') {
-        window.ShopkeeperApp.init();
+<!-- i18n: all translation strings. Must load first so other modules can call i18n.t() -->
+<script defer src="js/i18n.js"></script>
+
+<!-- db-bridge: stubbed Firebase hooks. All TODO comments for real SDK integration -->
+<script defer src="js/db-bridge.js"></script>
+
+<!-- geo: GPS + Guwahati bounding box check -->
+<script defer src="js/geo.js"></script>
+
+<!-- notifications: Web Push permission + foreground audio -->
+<script defer src="js/notifications.js"></script>
+
+<!-- upi: deep link builder (used in customer.html, imported here for future use) -->
+<script defer src="js/upi.js"></script>
+
+<!-- app: shared utilities (WhatsApp share, install banner, formatters) -->
+<script defer src="js/app.js"></script>
+
+<!-- shopkeeper: ALL dashboard logic — this is the main SPA controller -->
+<script defer src="js/shopkeeper.js"></script>
+
+<!-- Service Worker registration (last — non-critical path) -->
+<script defer src="js/sw-register.js"></script>
+
+<!-- ── INLINE BOOTSTRAP: shopkeeper SPA initialisation ──────── -->
+<script>
+/**
+ * shopkeeper.html inline bootstrap
+ * Runs AFTER all deferred scripts have loaded (DOMContentLoaded).
+ *
+ * Responsibilities:
+ *   1. Determine which screen to show on load
+ *   2. Attach lang-toggle listeners (duplicated here as a safety net
+ *      in case shopkeeper.js hasn't attached them yet)
+ *   3. Export showScreen() for shopkeeper.js to call
+ *
+ * All heavy logic lives in js/shopkeeper.js.
+ * All DB calls go through js/db-bridge.js.
+ */
+
+'use strict';
+
+// ─── Screen router ─────────────────────────────────────────────
+/**
+ * showScreen(id)
+ * Hides all .screen elements, shows the one with data-screen === id.
+ * Called by shopkeeper.js after any state transition.
+ * @param {string} id - e.g. 'register' | 'shift-start' | 'dashboard' | 'shift-end'
+ */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const target = document.querySelector(`[data-screen="${id}"]`);
+  if (target) {
+    target.classList.add('active');
+    // Announce to screen readers
+    target.setAttribute('tabindex', '-1');
+    target.focus({ preventScroll: true });
+  }
+}
+// Expose globally so shopkeeper.js can call showScreen() after it loads
+window.showScreen = showScreen;
+
+// ─── Language toggle (shared across all lang-toggle elements) ──
+/**
+ * initLangToggles()
+ * Attaches click handlers to ALL .lang-btn elements on the page.
+ * Delegates to i18n.setLang() which re-renders all [data-i18n] elements.
+ * Persists selection in localStorage under key 'lb_lang'.
+ */
+function initLangToggles() {
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const lang = btn.dataset.lang;
+
+      // Update aria-pressed on all toggles in all lang-toggle groups
+      document.querySelectorAll('.lang-btn').forEach(b => {
+        const isActive = b.dataset.lang === lang;
+        b.classList.toggle('active', isActive);
+        b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+
+      // Delegate to i18n module (loaded via i18n.js)
+      if (window.i18n && typeof window.i18n.setLang === 'function') {
+        window.i18n.setLang(lang);
       }
+
+      // Persist
+      try { localStorage.setItem('lb_lang', lang); } catch(e) {}
     });
-  </script>
+  });
+
+  // Restore persisted language on load
+  try {
+    const saved = localStorage.getItem('lb_lang') || 'en';
+    document.querySelectorAll(`.lang-btn[data-lang="${saved}"]`).forEach(b => {
+      b.classList.add('active');
+      b.setAttribute('aria-pressed', 'true');
+    });
+    document.querySelectorAll(`.lang-btn:not([data-lang="${saved}"])`).forEach(b => {
+      b.classList.remove('active');
+      b.setAttribute('aria-pressed', 'false');
+    });
+  } catch(e) {}
+}
+
+// ─── Initial screen decision ───────────────────────────────────
+/**
+ * determineInitialScreen()
+ * Reads localStorage to decide which screen the shopkeeper should see.
+ * This logic is intentionally simple — shopkeeper.js handles all richer
+ * state after it loads.
+ *
+ * State machine:
+ *   No lb_shop_id → 'register'  (first-time user)
+ *   lb_shop_id present, no active shift → 'shift-start'
+ *   lb_shift_active === 'true' → 'dashboard' (page was refreshed mid-shift)
+ *   lb_shift_ended === 'true' → 'shift-end'
+ */
+function determineInitialScreen() {
+  try {
+    const shopId      = localStorage.getItem('lb_shop_id');
+    const shiftActive = localStorage.getItem('lb_shift_active') === 'true';
+    const shiftEnded  = localStorage.getItem('lb_shift_ended')  === 'true';
+
+    // Deep link: shopkeeper.html#register forces registration screen
+    if (window.location.hash === '#register' || !shopId) {
+      return 'register';
+    }
+    if (shiftEnded) return 'shift-end';
+    if (shiftActive) return 'dashboard';
+    return 'shift-start';
+  } catch(e) {
+    return 'register'; // Safe fallback
+  }
+}
+
+// ─── Boot ──────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initLangToggles();
+
+  // Show the correct initial screen immediately (before shopkeeper.js runs)
+  const initialScreen = determineInitialScreen();
+  showScreen(initialScreen);
+
+  // If returning to register via #register hash
+  if (window.location.hash === '#register') {
+    showScreen('register');
+  }
+
+  // Populate shift-start screen with shop name from localStorage
+  try {
+    const shopName  = localStorage.getItem('lb_shop_name')  || '';
+    const ownerName = localStorage.getItem('lb_owner_name') || '';
+    const openTime  = localStorage.getItem('lb_open_time')  || '';
+    const closeTime = localStorage.getItem('lb_close_time') || '';
+
+    if (shopName) {
+      const shopNameEl = document.getElementById('shift-shop-name-display');
+      if (shopNameEl) shopNameEl.textContent = shopName;
+
+      const dashShopName = document.getElementById('dash-shop-name');
+      if (dashShopName) dashShopName.textContent = shopName;
+    }
+
+    if (ownerName) {
+      const greetingEl = document.getElementById('shift-greeting-name');
+      if (greetingEl) {
+        // Greeting text will be updated by i18n.js, but populate name here
+        greetingEl.dataset.ownerName = ownerName;
+      }
+    }
+
+    if (openTime && closeTime) {
+      const hoursEl = document.getElementById('shift-hours-display');
+      if (hoursEl) {
+        // Format: "08:00" → "8:00 AM"
+        const fmt = t => {
+          const [h, m] = t.split(':').map(Number);
+          const ampm = h >= 12 ? 'PM' : 'AM';
+          return `${h % 12 || 12}:${m.toString().padStart(2,'0')} ${ampm}`;
+        };
+        hoursEl.textContent = `Today: ${fmt(openTime)} – ${fmt(closeTime)}`;
+      }
+    }
+  } catch(e) {}
+});
+</script>
 
 </body>
 </html>
