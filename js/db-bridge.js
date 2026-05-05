@@ -1,17 +1,25 @@
-/* ============================================================
-   LocalBuy — db-bridge.js
-   Firebase-ready stub layer for all data operations.
+/**
+ * db-bridge.js — LocalBuy
+ * ─────────────────────────────────────────────────────────────────────────────
+ * All data operations are stubbed here. Every function is annotated with a
+ * // TODO: Replace with Firebase SDK comment so integration is drop-in ready.
+ *
+ * Pattern:
+ *   - Reads  → return Promise.resolve(mockData)
+ *   - Writes → console.log the payload, return Promise.resolve({ success: true })
+ *   - Listeners → return an unsubscribe function (no-op for now)
+ *
+ * Firebase SDK swap guide:
+ *   1. npm install firebase  (or load from CDN)
+ *   2. Replace each stub body with the Firestore / RTDB call shown in the TODO
+ *   3. Remove the MOCK_* constants once real data flows
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 
-   Every function here is a drop-in replacement point.
-   When you're ready to go live:
-     1. npm install firebase (or use CDN)
-     2. Replace each stub body with the commented Firebase code
-     3. Remove the console.log calls
-   ============================================================ */
+'use strict';
 
-/* ── Mock Data ────────────────────────────────────────────── */
-// These are the same shops referenced by customer.js and index.html.
-// TODO: Replace with real Firestore collection query.
+/* ─── Mock data (remove when Firebase is live) ──────────────────────────── */
+
 const MOCK_SHOPS = [
   {
     id: 's1',
@@ -23,17 +31,13 @@ const MOCK_SHOPS = [
     status: 'open',
     hours: '7:00 AM – 9:00 PM',
     lastOrder: '8:30 PM',
-    announcement: '🎉 Fresh Assam tea leaves restocked every Monday!',
-    ratings: 4.8,
-    ratingCount: 34,
-    upiId: 'STUB_VPA_DO_NOT_EXPOSE', // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
-    lat: 26.1445,
-    lng: 91.7362,
-    reviews: [
-      { author: 'Priyanka B.', text: 'Always fresh stock, Rajesh-da is very helpful.', stars: 5 },
-      { author: 'Amit K.',     text: 'Quick service, ordered Maggi and got it in 7 min!', stars: 5 },
-      { author: 'Rupa D.',     text: 'Good variety, a bit crowded on Saturdays.', stars: 4 }
-    ]
+    address: 'Fancy Bazar, Guwahati',
+    rating: 4.8,
+    ratingCount: 23,
+    upiId: 'sharma.store@upi',      // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    requiresPrePayment: false,
+    announcement: null,
+    tags: ['groceries', 'daily essentials', 'pulses', 'spices']
   },
   {
     id: 's2',
@@ -45,17 +49,13 @@ const MOCK_SHOPS = [
     status: 'busy',
     hours: '8:00 AM – 10:00 PM',
     lastOrder: '9:45 PM',
-    announcement: null,
-    ratings: 4.7,
-    ratingCount: 58,
-    upiId: 'STUB_VPA_DO_NOT_EXPOSE', // TODO: UPI VPA must be resolved server-side
-    lat: 26.1420,
-    lng: 91.7389,
-    reviews: [
-      { author: 'Dr. S. Bora', text: 'Always stocked with common generics. Very convenient.', stars: 5 },
-      { author: 'Meena P.',    text: 'They called to confirm the prescription — proper service!', stars: 5 },
-      { author: 'Rahul G.',    text: 'A bit slow at peak hours but reliable.', stars: 4 }
-    ]
+    address: 'Pan Bazar, Guwahati',
+    rating: 4.9,
+    ratingCount: 41,
+    upiId: 'citymedical@upi',       // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    requiresPrePayment: false,
+    announcement: '🎉 Free blood pressure check every Saturday morning!',
+    tags: ['medicines', 'health', 'vitamins', 'first aid']
   },
   {
     id: 's3',
@@ -67,17 +67,13 @@ const MOCK_SHOPS = [
     status: 'open',
     hours: '6:00 AM – 8:00 PM',
     lastOrder: '7:30 PM',
+    address: 'Paltan Bazar, Guwahati',
+    rating: 4.7,
+    ratingCount: 18,
+    upiId: 'kamakhyabakery@upi',    // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    requiresPrePayment: false,
     announcement: '🎉 Fresh momo every Saturday morning!',
-    ratings: 4.9,
-    ratingCount: 120,
-    upiId: 'STUB_VPA_DO_NOT_EXPOSE', // TODO: UPI VPA must be resolved server-side
-    lat: 26.1388,
-    lng: 91.7410,
-    reviews: [
-      { author: 'Lakhi D.',    text: 'The pork momo here is unmatched in all of Guwahati.', stars: 5 },
-      { author: 'Bipul S.',    text: 'Bread is always fresh-baked. Order early!', stars: 5 },
-      { author: 'Junu B.',     text: 'Love the luchi on Sunday mornings.', stars: 5 }
-    ]
+    tags: ['bread', 'cake', 'pastry', 'momo', 'snacks']
   },
   {
     id: 's4',
@@ -89,283 +85,360 @@ const MOCK_SHOPS = [
     status: 'closed',
     hours: '5:00 AM – 1:00 PM',
     lastOrder: '12:45 PM',
+    address: 'Ulubari, Guwahati',
+    rating: 4.6,
+    ratingCount: 12,
+    upiId: 'krishnadairy@upi',      // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    requiresPrePayment: false,
     announcement: null,
-    ratings: 4.6,
-    ratingCount: 22,
-    upiId: 'STUB_VPA_DO_NOT_EXPOSE', // TODO: UPI VPA must be resolved server-side
-    lat: 26.1350,
-    lng: 91.7440,
-    reviews: [
-      { author: 'Sima H.',     text: 'Best Amul curd in the area, always chilled.', stars: 5 },
-      { author: 'Nabajit K.',  text: 'Opens sharp at 5 AM — great for morning walkers.', stars: 4 },
-      { author: 'Protima D.',  text: 'Closes by noon, plan accordingly.', stars: 4 }
-    ]
-  }
-];
-
-/* ── Mock Orders (for shopkeeper demo) ───────────────────────*/
-const MOCK_ORDERS = [
-  {
-    id: 'LB-8472',
-    shopId: 's1',
-    customerName: 'Priyanka B.',
-    customerPhone: 'REDACTED', // TODO: Encrypt at rest in Firebase, never log to console in production
-    items: 'Tata Salt 1kg × 2\nAmul Butter 500g\nMaggi Noodles × 3\nAriel Detergent 1kg',
-    photo: null,
-    paymentMethod: 'cash',
-    pickupTime: 'ASAP',
-    scheduledDate: null,
-    status: 'pending',
-    orderedAt: new Date(Date.now() - 8 * 60000).toISOString(), // 8 min ago
-    readyBy: new Date(Date.now() + 12 * 60000).toISOString(), // 12 min from now
-    total: null,
-    notes: '',
-    urgency: 'green'
+    tags: ['milk', 'curd', 'paneer', 'butter', 'ghee']
   },
   {
-    id: 'LB-8471',
-    shopId: 's1',
-    customerName: 'Rahul Dev',
-    customerPhone: 'REDACTED', // TODO: Encrypt at rest in Firebase, never log to console in production
-    items: 'Colgate Toothpaste × 2\nDettol Soap × 3\nBoost 500g\nKokum Sharbat',
-    photo: null,
-    paymentMethod: 'upi',
-    pickupTime: '2:30 PM',
-    scheduledDate: null,
-    status: 'quoted',
-    orderedAt: new Date(Date.now() - 22 * 60000).toISOString(),
-    readyBy: new Date(Date.now() + 8 * 60000).toISOString(),
-    total: 347,
-    notes: 'No Kokum Sharbat — added Rasna Orange instead.',
-    urgency: 'amber'
+    id: 's5',
+    name: 'Bora Stationery House',
+    category: 'stationery',
+    emoji: '✏️',
+    distance: '0.6 km',
+    ready: '7 min',
+    status: 'open',
+    hours: '9:00 AM – 7:00 PM',
+    lastOrder: '6:45 PM',
+    address: 'Silpukhuri, Guwahati',
+    rating: 4.5,
+    ratingCount: 9,
+    upiId: 'borastationery@upi',    // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    requiresPrePayment: false,
+    announcement: null,
+    tags: ['pens', 'notebooks', 'art supplies', 'school']
+  },
+  {
+    id: 's6',
+    name: 'Nandini Fish Market',
+    category: 'fish',
+    emoji: '🐟',
+    distance: '1.4 km',
+    ready: '10 min',
+    status: 'busy',
+    hours: '5:00 AM – 11:00 AM',
+    lastOrder: '10:30 AM',
+    address: 'Pan Bazar, Guwahati',
+    rating: 4.7,
+    ratingCount: 31,
+    upiId: 'nandinifish@upi',       // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    requiresPrePayment: false,
+    announcement: '🎉 Fresh Rohu and Catla daily from Brahmaputra!',
+    tags: ['rohu', 'catla', 'prawns', 'hilsa', 'fresh fish']
   }
 ];
 
-/* ── DB Bridge Object ─────────────────────────────────────── */
+/* Mock reviews per shop */
+const MOCK_REVIEWS = {
+  s1: [
+    { name: 'Priyanka B.', rating: 5, text: 'Quick and easy. Ordered from office, walked in on the way home. Rajesh bhaiya always keeps things ready!', date: '2 days ago' },
+    { name: 'Amit D.',     rating: 5, text: 'Best kirana in Fancy Bazar. Never out of stock for essentials.', date: '1 week ago' },
+    { name: 'Meena K.',    rating: 4, text: 'Good service. Slight wait time but staff is helpful.', date: '2 weeks ago' }
+  ],
+  s2: [
+    { name: 'Dr. S. Hazarika', rating: 5, text: 'Always have the medicines I need. No waiting. Perfect.', date: '3 days ago' },
+    { name: 'Rupa B.',         rating: 5, text: 'Ordered rare BP medicines — ready in 4 minutes. Impressive.', date: '5 days ago' },
+    { name: 'Tarun G.',        rating: 5, text: 'Very professional. Staff double-checks prescriptions.', date: '1 week ago' }
+  ],
+  s3: [
+    { name: 'Sunita P.',  rating: 5, text: 'Ordered birthday cake from office. It was ready when I walked in. Delicious!', date: '1 day ago' },
+    { name: 'Kamal N.',   rating: 4, text: 'Great momos every Saturday. Worth the walk from Paltan Bazar.', date: '4 days ago' },
+    { name: 'Lily B.',    rating: 5, text: 'Freshest bread in the neighbourhood. Always warm.', date: '1 week ago' }
+  ],
+  s4: [
+    { name: 'Bhaswati C.', rating: 5, text: 'Pure milk, no dilution. Best paneer in Ulubari!', date: '2 days ago' },
+    { name: 'Hemen S.',    rating: 4, text: 'Early morning pickup works perfectly for daily milk.', date: '3 days ago' },
+    { name: 'Ankita D.',   rating: 5, text: 'Ghee quality is excellent. Worth the early wake-up.', date: '1 week ago' }
+  ],
+  s5: [],
+  s6: [
+    { name: 'Dilip B.',    rating: 5, text: 'Always fresh catch. Rohu was packed and ready to cook!', date: '1 day ago' },
+    { name: 'Maya R.',     rating: 4, text: 'Good fish, very fresh. Bit busy in mornings.', date: '3 days ago' },
+    { name: 'Pankaj S.',   rating: 5, text: 'Best hilsa in Guwahati. They know their fish!', date: '5 days ago' }
+  ]
+};
+
+/* ─── DB Namespace (exported to window for other modules) ─────────────────── */
+
 const DB = {
 
-  // ── Shop operations ─────────────────────────────────────
+  /* ── Shop operations ──────────────────────────────────────────────────── */
 
   /**
-   * Fetch shops, optionally filtered by category/status.
+   * Fetch all shops, optionally filtered by category / search term.
+   * @param {Object} filters — { category: string, search: string }
+   * @returns {Promise<Array>}
+   *
    * TODO: Replace with:
-   *   let q = firebase.firestore().collection('shops');
-   *   if (filters.category) q = q.where('category', '==', filters.category);
-   *   return q.get().then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
+   *   let ref = firebase.firestore().collection('shops').where('active', '==', true);
+   *   if (filters.category) ref = ref.where('category', '==', filters.category);
+   *   const snap = await ref.get();
+   *   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
    */
-  getShops: (filters = {}) => {
-    console.log('[DB] getShops', filters);
+  getShops(filters = {}) {
     let shops = [...MOCK_SHOPS];
-    if (filters.category) {
+
+    if (filters.category && filters.category !== 'all') {
       shops = shops.filter(s => s.category === filters.category);
     }
+
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
+      shops = shops.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        (s.tags || []).some(t => t.includes(q))
+      );
+    }
+
     return Promise.resolve(shops);
   },
 
   /**
-   * Set shop online/offline status.
+   * Fetch a single shop by ID.
+   * @param {string} shopId
+   * @returns {Promise<Object|null>}
+   *
    * TODO: Replace with:
-   *   return firebase.firestore().doc(`shops/${shopId}`).update({ status, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+   *   const doc = await firebase.firestore().collection('shops').doc(shopId).get();
+   *   return doc.exists ? { id: doc.id, ...doc.data() } : null;
    */
-  setShopStatus: (shopId, status) => {
+  getShop(shopId) {
+    const shop = MOCK_SHOPS.find(s => s.id === shopId) || null;
+    return Promise.resolve(shop);
+  },
+
+  /**
+   * Set shop open/closed status.
+   * @param {string} shopId
+   * @param {'open'|'busy'|'closed'|'offline'} status
+   *
+   * TODO: Replace with:
+   *   await firebase.firestore().collection('shops').doc(shopId).update({ status, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+   */
+  setShopStatus(shopId, status) {
     console.log('[DB] setShopStatus', shopId, status);
-    // TODO: Replace with Firebase SDK update
-    return Promise.resolve();
+    return Promise.resolve({ success: true });
   },
 
   /**
-   * Update shop opening hours.
+   * Update shop hours.
+   * @param {string} shopId
+   * @param {{ open: string, close: string, lastOrder: string }} hours
+   *
    * TODO: Replace with:
-   *   return firebase.firestore().doc(`shops/${shopId}`).update({ hours });
+   *   await firebase.firestore().collection('shops').doc(shopId).update({ hours });
    */
-  updateShopHours: (shopId, hours) => {
+  updateShopHours(shopId, hours) {
     console.log('[DB] updateShopHours', shopId, hours);
-    // TODO: Replace with Firebase SDK update
-    return Promise.resolve();
+    return Promise.resolve({ success: true });
   },
 
   /**
-   * Get a single shop by ID.
+   * Fetch reviews for a shop.
+   * @param {string} shopId
+   * @returns {Promise<Array>}
+   *
    * TODO: Replace with:
-   *   return firebase.firestore().doc(`shops/${shopId}`).get().then(d => ({ id: d.id, ...d.data() }));
+   *   const snap = await firebase.firestore().collection('shops').doc(shopId).collection('reviews').orderBy('createdAt', 'desc').limit(3).get();
+   *   return snap.docs.map(d => d.data());
    */
-  getShop: (shopId) => {
-    console.log('[DB] getShop', shopId);
-    const shop = MOCK_SHOPS.find(s => s.id === shopId);
-    return Promise.resolve(shop || null);
+  getReviews(shopId) {
+    return Promise.resolve(MOCK_REVIEWS[shopId] || []);
   },
 
-  // ── Order operations ───────────────────────────────────
+  /* ── Order operations ─────────────────────────────────────────────────── */
 
   /**
    * Create a new customer order.
+   * @param {Object} order — full order payload
+   * @returns {Promise<{ id: string }>}
+   *
    * TODO: Replace with:
-   *   return firebase.firestore().collection('orders').add({
+   *   const ref = await firebase.firestore().collection('orders').add({
    *     ...order,
-   *     createdAt: firebase.firestore.FieldValue.serverTimestamp()
+   *     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+   *     status: 'pending'
    *   });
+   *   return { id: ref.id };
+   *
+   * NOTE: Customer phone numbers in order payload
+   * TODO: Encrypt at rest in Firebase, never log to console in production
    */
-  createOrder: (order) => {
-    console.log('[DB] createOrder', { ...order, customerPhone: '[REDACTED]' }); // Never log phone in production
-    const id = 'LB-' + Math.floor(1000 + Math.random() * 8999);
-    const savedOrder = { ...order, id, status: 'pending', createdAt: new Date().toISOString() };
-
-    // Save to localStorage for offline resilience
-    const orders = JSON.parse(localStorage.getItem('lb_orders') || '[]');
-    orders.unshift(savedOrder);
-    localStorage.setItem('lb_orders', JSON.stringify(orders.slice(0, 20))); // Keep last 20
-    localStorage.setItem('lb_current_order', JSON.stringify(savedOrder));
-
-    return Promise.resolve({ id, order: savedOrder });
+  createOrder(order) {
+    const id = 'LB-' + Math.floor(1000 + Math.random() * 9000);
+    console.log('[DB] createOrder — payload omitted in production', { id, shopId: order.shopId });
+    return Promise.resolve({ id });
   },
 
   /**
-   * Update order status. Called by shopkeeper dashboard.
+   * Update the status of an existing order.
+   * @param {string} orderId
+   * @param {'pending'|'quoted'|'packing'|'ready'|'collected'|'cancelled'} status
+   * @param {Object} payload — e.g., { amount: 347, notes: '...' } for quoted status
+   *
    * TODO: Replace with:
-   *   return firebase.firestore().doc(`orders/${orderId}`).update({
-   *     status, ...payload,
+   *   await firebase.firestore().collection('orders').doc(orderId).update({
+   *     status,
+   *     ...payload,
    *     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
    *   });
    */
-  updateOrderStatus: (orderId, status, payload = {}) => {
+  updateOrderStatus(orderId, status, payload = {}) {
     console.log('[DB] updateOrderStatus', orderId, status, payload);
-    // TODO: Replace with Firebase SDK update
-    // Also triggers Firestore cloud function that sends SMS/push
-    return Promise.resolve();
+    return Promise.resolve({ success: true });
   },
 
   /**
-   * Listen to live orders for a shop. Returns an unsubscribe function.
-   * Called when shopkeeper dashboard opens.
+   * Real-time listener for orders belonging to a shop.
+   * @param {string} shopId
+   * @param {Function} callback — called with array of order objects on change
+   * @returns {Function} unsubscribe
    *
    * TODO: Replace with:
-   *   const unsubscribe = firebase.firestore()
+   *   return firebase.firestore()
    *     .collection('orders')
    *     .where('shopId', '==', shopId)
-   *     .where('status', 'not-in', ['completed', 'cancelled'])
+   *     .where('status', 'in', ['pending', 'quoted', 'packing', 'ready'])
    *     .orderBy('createdAt', 'desc')
-   *     .onSnapshot(snapshot => {
-   *       const orders = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-   *       callback(orders);
-   *     });
-   *   return unsubscribe;
+   *     .onSnapshot(snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
    */
-  listenOrders: (shopId, callback) => {
-    console.log('[DB] listenOrders registered for shop:', shopId);
+  listenOrders(shopId, callback) {
+    console.log('[DB] listenOrders registered for', shopId);
+    // Stub: return no-op unsubscribe function
+    return () => {};
+  },
 
-    // Stub: immediately deliver mock orders, then simulate a new order after 15s
-    setTimeout(() => callback([...MOCK_ORDERS]), 500);
+  /**
+   * Real-time listener for a single order (customer tracker).
+   * @param {string} orderId
+   * @param {Function} callback — called with order object on every update
+   * @returns {Function} unsubscribe
+   *
+   * TODO: Replace with:
+   *   return firebase.firestore()
+   *     .collection('orders')
+   *     .doc(orderId)
+   *     .onSnapshot(doc => callback({ id: doc.id, ...doc.data() }));
+   */
+  listenOrder(orderId, callback) {
+    console.log('[DB] listenOrder registered for', orderId);
 
-    // Simulate new incoming order for demo purposes
-    const demoTimer = setTimeout(() => {
-      const newOrder = {
-        id: 'LB-' + Math.floor(8000 + Math.random() * 999),
-        shopId,
-        customerName: 'Dimpi Saikia',
-        customerPhone: 'REDACTED',
-        items: 'Horlicks 500g\nMilk 1L × 2\nBread (white)',
-        photo: null,
-        paymentMethod: 'cash',
-        pickupTime: 'ASAP',
-        status: 'pending',
-        orderedAt: new Date().toISOString(),
-        readyBy: new Date(Date.now() + 15 * 60000).toISOString(),
-        total: null,
-        notes: '',
-        urgency: 'green'
+    // Stub: simulate a status progression for demo purposes
+    // Remove this entire setTimeout chain when Firebase is live
+    let stage = 0;
+    const stages = ['pending', 'quoted', 'packing', 'ready'];
+    const mockOrderBase = JSON.parse(localStorage.getItem('lb_current_order') || '{}');
+
+    const advance = () => {
+      if (stage >= stages.length) return;
+      const mockOrder = {
+        ...mockOrderBase,
+        id: orderId,
+        status: stages[stage],
+        amount: stage >= 1 ? 347 : null,
+        shopkeeperNote: stage >= 1 ? 'No Tata Salt — added Captain Cook 1kg ✓' : null
       };
-      callback([newOrder, ...MOCK_ORDERS]);
-    }, 15000);
-
-    // Return unsubscribe function
-    return () => {
-      clearTimeout(demoTimer);
-      console.log('[DB] listenOrders unsubscribed for', shopId);
+      callback(mockOrder);
+      stage++;
+      if (stage < stages.length) setTimeout(advance, 15000); // advance every 15s in demo
     };
+
+    setTimeout(advance, 500); // initial callback after short delay
+
+    return () => { stage = stages.length; }; // unsubscribe stops progression
   },
 
   /**
    * Cancel an order.
+   * @param {string} orderId
+   * @param {string} reason
+   *
    * TODO: Replace with:
-   *   return firebase.firestore().doc(`orders/${orderId}`).update({
-   *     status: 'cancelled', cancelReason: reason,
+   *   await firebase.firestore().collection('orders').doc(orderId).update({
+   *     status: 'cancelled',
+   *     cancelReason: reason,
    *     cancelledAt: firebase.firestore.FieldValue.serverTimestamp()
    *   });
    */
-  cancelOrder: (orderId, reason) => {
+  cancelOrder(orderId, reason) {
     console.log('[DB] cancelOrder', orderId, reason);
-    // TODO: Replace with Firebase SDK update + trigger customer notification
-    return Promise.resolve();
-  },
-
-  /**
-   * Get order history for a customer (from localStorage for now).
-   * TODO: Replace with:
-   *   return firebase.firestore()
-   *     .collection('orders')
-   *     .where('customerId', '==', customerId)
-   *     .orderBy('createdAt', 'desc')
-   *     .limit(10)
-   *     .get();
-   */
-  getOrderHistory: () => {
-    const orders = JSON.parse(localStorage.getItem('lb_orders') || '[]');
-    return Promise.resolve(orders);
-  },
-
-  // ── Customer notification hooks ──────────────────────────
-
-  /**
-   * Trigger SMS + push when order is ready for pickup.
-   * TODO: Replace with:
-   *   Cloud Function automatically fires on Firestore write (status → 'ready').
-   *   Or: return fetch('/api/notify/ready', { method: 'POST', body: JSON.stringify({ orderId }) });
-   */
-  notifyCustomerReady: (orderId) => {
-    console.log('[DB] SMS hook: order ready for pickup', orderId);
-    // TODO: POST to backend → triggers Firebase Cloud Messaging + SMS gateway
-    return Promise.resolve();
-  },
-
-  /**
-   * Send quote (total + notes) to customer via push notification.
-   * TODO: Replace with:
-   *   Cloud Function fires on Firestore write (status → 'quoted').
-   *   Or: return fetch('/api/notify/quote', { method: 'POST', body: JSON.stringify({ orderId, amount, notes }) });
-   */
-  notifyCustomerQuoted: (orderId, amount, notes) => {
-    console.log('[DB] Push: quote sent to customer', orderId, { amount, notes });
-    // TODO: POST to backend → triggers Push notification to customer's device
-    return Promise.resolve();
-  },
-
-  // ── Shopkeeper registration ──────────────────────────────
-
-  /**
-   * Submit a new shopkeeper registration request.
-   * TODO: Replace with:
-   *   return firebase.firestore().collection('registrations').add({
-   *     ...data,
-   *     submittedAt: firebase.firestore.FieldValue.serverTimestamp()
-   *   });
-   *   Then trigger welcome email/SMS via Cloud Function.
-   */
-  submitRegistration: (data) => {
-    console.log('[DB] submitRegistration', { ...data, phone: '[REDACTED]' });
-    // TODO: Replace with Firebase SDK add
     return Promise.resolve({ success: true });
   },
 
-  // ── Analytics (privacy-first — zero PII) ─────────────────
+  /**
+   * Fetch past orders for a customer (from localStorage in stub).
+   * @param {string} customerPhone — hashed/anonymised in production
+   * @returns {Promise<Array>}
+   *
+   * TODO: Replace with:
+   *   const snap = await firebase.firestore()
+   *     .collection('orders')
+   *     .where('customerPhoneHash', '==', hash(customerPhone))
+   *     .orderBy('createdAt', 'desc')
+   *     .limit(5)
+   *     .get();
+   *   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+   */
+  getPastOrders() {
+    try {
+      return Promise.resolve(
+        JSON.parse(localStorage.getItem('lb_past_orders') || '[]')
+      );
+    } catch {
+      return Promise.resolve([]);
+    }
+  },
+
+  /* ── Customer notification hooks ──────────────────────────────────────── */
 
   /**
-   * Log an analytics event. No PII allowed here.
+   * Trigger SMS to customer when order is ready for pickup.
+   * @param {string} orderId
+   *
+   * TODO: Replace with a Cloud Function trigger:
+   *   This should be called from a Firestore trigger (not frontend) for security.
+   *   Cloud Function: onOrderReady → send SMS via Twilio/MSG91 with pickup code.
+   */
+  notifyCustomerReady(orderId) {
+    console.log('[DB] SMS hook: order ready', orderId);
+    return Promise.resolve({ success: true });
+  },
+
+  /**
+   * Push notification to customer when shopkeeper sends quote.
+   * @param {string} orderId
+   * @param {number} amount
+   * @param {string} notes
+   *
+   * TODO: Replace with a Cloud Function trigger that sends Web Push
+   *   via the stored push subscription for this order's customer.
+   */
+  notifyCustomerQuoted(orderId, amount, notes) {
+    console.log('[DB] Push: quote sent', orderId, { amount });
+    return Promise.resolve({ success: true });
+  },
+
+  /* ── Analytics (privacy-first, no PII) ───────────────────────────────── */
+
+  /**
+   * Log an analytics event. No personally identifiable information.
+   * @param {string} name — event name, e.g., 'order_placed', 'shop_viewed'
+   * @param {Object} params — non-PII params only
+   *
    * TODO: Replace with:
    *   firebase.analytics().logEvent(name, params);
-   *   Or: PostHog / Plausible / Umami for privacy-preserving analytics.
+   *   OR a privacy-first alternative like Plausible / Umami.
+   *   NEVER log phone numbers, names, or order content here.
    */
-  logEvent: (name, params = {}) => {
+  logEvent(name, params = {}) {
+    // TODO: Replace with real analytics (Firebase Analytics / Plausible)
     console.log('[Analytics]', name, params);
-    // TODO: Replace with Firebase Analytics or privacy-preserving alternative
   }
 };
+
+/* ─── Export to window ────────────────────────────────────────────────────── */
+window.DB = DB;
+window.MOCK_SHOPS = MOCK_SHOPS; // Remove when Firebase is live
