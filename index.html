@@ -1,476 +1,1293 @@
 <!DOCTYPE html>
+<!--
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  LocalBuy — Guwahati                                         ║
+  ║  index.html  ·  Public-facing landing shell                  ║
+  ║                                                              ║
+  ║  Design system: Fraunces (display) + DM Sans (UI)            ║
+  ║  Colour palette: Sage green primary · Amber accent           ║
+  ║  Architecture: Vanilla HTML5/CSS3/JS — zero frameworks       ║
+  ║                                                              ║
+  ║  Connection points:                                          ║
+  ║    ├── css/main.css          (design tokens + shared)        ║
+  ║    ├── css/animations.css    (@keyframes library)            ║
+  ║    ├── js/app.js             (shared utils, GPS, install)    ║
+  ║    ├── js/sw-register.js     (service worker registration)   ║
+  ║    ├── js/geo.js             (GPS + Guwahati bounds check)   ║
+  ║    └── assets/manifest.json  (PWA manifest)                  ║
+  ╚══════════════════════════════════════════════════════════════╝
+-->
 <html lang="en-IN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="description" content="Order from local shops in Guwahati. Walk in and collect. No delivery. No minimum.">
-  <meta name="theme-color" content="#0f5c3a">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="LocalBuy">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Order from neighbourhood shops in Guwahati. Walk in when ready. No delivery. No minimum order." />
+  <meta name="theme-color" content="#0f5c3a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
   <!-- Open Graph -->
-  <meta property="og:title" content="LocalBuy — Guwahati's neighbourhood shops, online">
-  <meta property="og:description" content="Order from kiranas, chemists, bakeries and more. Walk in when ready.">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://localbuy.netlify.app">
+  <meta property="og:title" content="LocalBuy — Guwahati's neighbourhood commerce" />
+  <meta property="og:description" content="Order from kiranas, chemists, bakeries and more. Walk in to collect." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://localbuy.in" />
 
-  <title>LocalBuy — Buy local. Pick up fast. Guwahati.</title>
-
-  <!-- Preconnect for Google Fonts (performance) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-  <!-- Fonts: Fraunces (hero) + DM Sans (UI) — display=swap for performance -->
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <title>LocalBuy — Order local. Walk in. Guwahati.</title>
 
   <!-- PWA Manifest -->
-  <link rel="manifest" href="assets/manifest.json">
-  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <link rel="manifest" href="assets/manifest.json" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
 
-  <!-- Critical CSS (above-fold, inlined for <1.5s FCP) -->
+  <!-- ═══════════════════════════════════════════════════════════
+       FONT LOADING — preconnect first, then stylesheet
+       display=swap prevents FOIT on slow connections
+  ══════════════════════════════════════════════════════════════ -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,300;1,9..144,600;1,9..144,700&family=DM+Sans:wght@300;400;500;600;700&display=swap"
+  />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       EXTERNAL CSS FILES
+       ─────────────────────────────────────────────────────────
+       TODO: When setting up your project, create these files:
+         1. css/main.css       — design tokens, reset, typography
+         2. css/animations.css — all @keyframes definitions
+       These are linked here so the HTML works when files exist.
+  ══════════════════════════════════════════════════════════════ -->
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CRITICAL ABOVE-FOLD CSS — inlined to avoid render blocking
+       Keep under 4KB. Covers only what is visible on first paint.
+  ══════════════════════════════════════════════════════════════ -->
   <style>
-    /* ── CRITICAL: Design tokens + above-fold layout ── */
+    /* ── 1. Design Tokens ─────────────────────────────────────── */
     :root {
-      --color-sage:       #0f5c3a;
-      --color-sage-mid:   #1a7a4e;
-      --color-sage-light: #e8f5ee;
-      --color-sage-pale:  #f0faf4;
-      --color-amber:      #d97706;
-      --color-amber-light:#fffbf0;
-      --color-surface:    #f8f7f4;
-      --color-ink:        #111827;
-      --color-muted:      #6b7280;
-      --status-open:      #16a34a;
-      --status-busy:      #d97706;
-      --status-closed:    #dc2626;
-      --color-upi:        #5f259f;
-      --color-wa:         #25d366;
+      --color-sage:        #0f5c3a;
+      --color-sage-mid:    #1a7a4e;
+      --color-sage-light:  #e8f5ee;
+      --color-sage-pale:   #f0faf4;
+      --color-amber:       #d97706;
+      --color-amber-light: #fffbf0;
+      --color-surface:     #f8f7f4;
+      --color-ink:         #111827;
+      --color-muted:       #6b7280;
+      --color-upi:         #5f259f;
+      --color-wa:          #25d366;
+      --status-open:       #16a34a;
+      --status-busy:       #d97706;
+      --status-closed:     #dc2626;
+
+      --font-display: 'Fraunces', Georgia, serif;
+      --font-ui:      'DM Sans', system-ui, sans-serif;
+
+      --radius-sm:  6px;
+      --radius-md:  12px;
+      --radius-lg:  20px;
+      --radius-xl:  28px;
+
+      --shadow-card: 0 2px 12px rgba(15,92,58,0.08);
+      --shadow-hover: 0 8px 24px rgba(15,92,58,0.12);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
+
+    /* ── 2. Reset ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
     body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--color-surface);
+      font-family: var(--font-ui);
+      background-color: var(--color-surface);
       color: var(--color-ink);
-      max-width: 540px;
-      margin: 0 auto;
-      min-height: 100vh;
-      position: relative;
+      line-height: 1.6;
       overflow-x: hidden;
     }
-    /* Background blobs + noise texture */
+
+    /* ── 3. Layout shell ─────────────────────────────────────── */
+    .page-wrap {
+      max-width: 540px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    /* ── 4. Background blobs + noise ────────────────────────── */
     body::before {
       content: '';
       position: fixed;
       inset: 0;
       background:
-        radial-gradient(ellipse 600px 400px at 80% -10%, rgba(15,92,58,0.08) 0%, transparent 70%),
-        radial-gradient(ellipse 500px 400px at -10% 100%, rgba(217,119,6,0.06) 0%, transparent 70%);
+        radial-gradient(ellipse 60% 40% at 80% 10%, rgba(15,92,58,0.10) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 35% at 20% 90%, rgba(217,119,6,0.08) 0%, transparent 55%);
       pointer-events: none;
       z-index: 0;
     }
+    /* SVG noise texture overlay */
     body::after {
       content: '';
       position: fixed;
       inset: 0;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-      opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
       pointer-events: none;
       z-index: 0;
     }
-    main, nav, section, header, footer { position: relative; z-index: 1; }
-    /* Visually hidden utility */
-    .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-    /* Hero skeleton to avoid CLS */
-    .hero { padding: 48px 20px 32px; text-align: center; }
+    .page-wrap > * { position: relative; z-index: 1; }
+
+    /* ── 5. Animations ─────────────────────────────────────── */
+    @media (prefers-reduced-motion: no-preference) {
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(18px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes pulse-dot {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.5); }
+        50%       { box-shadow: 0 0 0 6px rgba(22,163,74,0); }
+      }
+      @keyframes ping {
+        0%   { transform: scale(1);   opacity: 1; }
+        100% { transform: scale(2.2); opacity: 0; }
+      }
+      @keyframes shimmer {
+        from { background-position: -200% 0; }
+        to   { background-position:  200% 0; }
+      }
+      @keyframes slideUp {
+        from { transform: translateY(0); opacity: 1; }
+        to   { transform: translateY(-100%); opacity: 0; }
+      }
+      .hero-animate { animation: fadeUp 0.5s ease forwards; opacity: 0; }
+      .hero-animate:nth-child(1) { animation-delay: 0.00s; }
+      .hero-animate:nth-child(2) { animation-delay: 0.06s; }
+      .hero-animate:nth-child(3) { animation-delay: 0.12s; }
+      .hero-animate:nth-child(4) { animation-delay: 0.18s; }
+      .hero-animate:nth-child(5) { animation-delay: 0.24s; }
+      .hero-animate:nth-child(6) { animation-delay: 0.30s; }
+    }
+
+    /* ── 6. Accessibility ─────────────────────────────────── */
+    *:focus-visible {
+      outline: 2px solid var(--color-sage);
+      outline-offset: 2px;
+    }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px;
+      padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0,0,0,0); border: 0;
+    }
+
+    /* ── 7. Typography ─────────────────────────────────────── */
+    h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; }
+    .eyebrow {
+      font-family: var(--font-ui);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--color-sage);
+    }
+
+    /* ── 8. Buttons ────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 0 20px;
+      border-radius: var(--radius-md);
+      font-family: var(--font-ui);
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: var(--color-sage); color: #fff; }
+    .btn-primary:hover { background: var(--color-sage-mid); }
+    .btn-outline {
+      background: transparent;
+      border: 1.5px solid var(--color-sage);
+      color: var(--color-sage);
+    }
+    .btn-outline:hover { background: var(--color-sage-light); }
+    .btn-wa { background: var(--color-wa); color: #fff; }
+    .btn-wa:hover { background: #1fba5a; }
+
+    /* ── 9. Install Banner ─────────────────────────────────── */
+    #install-banner {
+      background: var(--color-sage);
+      padding: 12px 16px;
+      display: none; /* JS shows this when beforeinstallprompt fires */
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    #install-banner.visible { display: flex; }
+    #install-banner.slide-up {
+      animation: slideUp 0.3s ease forwards;
+    }
+    .install-banner__text strong {
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+      display: block;
+    }
+    .install-banner__text span {
+      color: rgba(255,255,255,0.72);
+      font-size: 12px;
+    }
+    .install-banner__btn {
+      min-width: 72px;
+      height: 34px;
+      padding: 0 14px;
+      border: 1.5px solid rgba(255,255,255,0.8);
+      border-radius: 20px;
+      background: transparent;
+      color: #fff;
+      font-family: var(--font-ui);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    .install-banner__btn:hover { background: rgba(255,255,255,0.15); }
+    .install-banner__dismiss {
+      background: none; border: none;
+      color: rgba(255,255,255,0.6);
+      font-size: 20px; cursor: pointer;
+      padding: 4px; line-height: 1;
+      flex-shrink: 0;
+    }
+
+    /* ── 10. Navigation ────────────────────────────────────── */
+    .navbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      background: rgba(248,247,244,0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(15,92,58,0.08);
+      position: sticky;
+      top: 0;
+      z-index: 90;
+    }
+    .navbar__logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+    .navbar__wordmark {
+      font-family: var(--font-ui);
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .navbar__wordmark .local { color: var(--color-ink); }
+    .navbar__wordmark .buy   { color: var(--color-sage); }
+    .navbar__link {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-sage);
+      text-decoration: none;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      transition: background 0.15s;
+    }
+    .navbar__link:hover { background: var(--color-sage-light); }
+
+    /* ── 11. Hero ─────────────────────────────────────────── */
+    .hero {
+      padding: 36px 20px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--color-sage-light);
+      border-radius: 20px;
+      padding: 6px 14px 6px 10px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-sage);
+      width: fit-content;
+    }
+    .live-dot {
+      width: 8px; height: 8px;
+      background: var(--status-open);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .live-dot { animation: pulse-dot 1.8s ease infinite; }
+    }
+    .hero__h1 {
+      font-size: clamp(38px, 9vw, 52px);
+      font-weight: 700;
+      font-style: italic;
+      color: var(--color-ink);
+      line-height: 1.1;
+    }
+    .hero__h1 .accent { color: var(--color-sage); }
+    .hero__subtitle {
+      font-size: 16px;
+      color: var(--color-muted);
+      line-height: 1.6;
+      max-width: 420px;
+    }
+    .hero__ctas {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .cta-card {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 18px 20px;
+      border-radius: var(--radius-lg);
+      text-decoration: none;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      min-height: 80px;
+    }
+    .cta-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+    .cta-card__title {
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 5px;
+    }
+    .cta-card__sub {
+      font-size: 13px;
+      opacity: 0.75;
+    }
+    .cta-card--primary {
+      background: var(--color-sage);
+      color: #fff;
+    }
+    .cta-card--secondary {
+      background: #fff;
+      border: 1.5px solid var(--color-sage);
+      color: var(--color-sage);
+    }
+
+    /* ── 12. Stats row ────────────────────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-top: 1px solid rgba(15,92,58,0.12);
+      border-bottom: 1px solid rgba(15,92,58,0.12);
+      text-align: center;
+    }
+    .stats-row__item { padding: 14px 8px; }
+    .stats-row__item + .stats-row__item {
+      border-left: 1px solid rgba(15,92,58,0.12);
+    }
+    .stats-row__value {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--color-sage);
+      line-height: 1;
+    }
+    .stats-row__label {
+      font-size: 11px;
+      color: var(--color-muted);
+      margin-top: 4px;
+    }
+
+    /* ── 13. Trust pills ─────────────────────────────────── */
+    .trust-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .trust-pill {
+      background: rgba(15,92,58,0.07);
+      color: var(--color-sage);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    /* ── 14. Section wrapper ─────────────────────────────── */
+    .section {
+      padding: 36px 20px;
+    }
+    .section--tight { padding: 24px 20px; }
+    .section__header { margin-bottom: 20px; }
+    .section__header h2 {
+      font-size: 26px;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+
+    /* ── 15. Category chips ──────────────────────────────── */
+    .category-chips {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      margin-bottom: 20px;
+    }
+    .category-chips::-webkit-scrollbar { display: none; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      padding: 8px 16px;
+      border-radius: 24px;
+      font-size: 13px;
+      font-weight: 500;
+      background: #fff;
+      border: 1.5px solid rgba(15,92,58,0.18);
+      color: var(--color-ink);
+      cursor: pointer;
+      min-height: 44px;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .chip:hover { background: var(--color-sage-light); border-color: var(--color-sage); }
+    .chip.active { background: var(--color-sage); color: #fff; border-color: var(--color-sage); }
+
+    /* ── 16. Shop card grid ──────────────────────────────── */
+    .shop-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .shop-card {
+      background: #fff;
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      cursor: pointer;
+      box-shadow: var(--shadow-card);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      border: 1px solid rgba(15,92,58,0.06);
+    }
+    .shop-card:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-hover);
+    }
+    .shop-card__icon {
+      width: 48px; height: 48px;
+      background: var(--color-sage-pale);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      margin-bottom: 12px;
+    }
+    .shop-card__name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-ink);
+      line-height: 1.25;
+      margin-bottom: 6px;
+    }
+    .shop-card__meta {
+      font-size: 11px;
+      color: var(--color-muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 10px;
+    }
+    .status-badge--open   { background: #dcfce7; color: var(--status-open); }
+    .status-badge--busy   { background: #fef3c7; color: var(--status-busy); }
+    .status-badge--closed { background: #fee2e2; color: var(--status-closed); }
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+    .status-badge--open   .status-dot { background: var(--status-open); }
+    .status-badge--busy   .status-dot { background: var(--status-busy); }
+    .status-badge--closed .status-dot { background: var(--status-closed); }
+
+    /* Shimmer skeleton for loading state */
+    .shop-card.skeleton { pointer-events: none; }
+    .shop-card.skeleton .shop-card__icon,
+    .shop-card.skeleton .shop-card__name,
+    .shop-card.skeleton .shop-card__meta {
+      background: linear-gradient(90deg, #e8e8e8 25%, #f5f5f5 50%, #e8e8e8 75%);
+      background-size: 200% 100%;
+      border-radius: 6px;
+      color: transparent;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .shop-card.skeleton .shop-card__icon,
+      .shop-card.skeleton .shop-card__name,
+      .shop-card.skeleton .shop-card__meta {
+        animation: shimmer 1.4s ease infinite;
+      }
+    }
+
+    /* ── 17. How It Works ────────────────────────────────── */
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .step-card {
+      background: var(--color-sage-pale);
+      border-radius: var(--radius-lg);
+      padding: 20px 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .step-card__number {
+      font-family: var(--font-display);
+      font-size: 72px;
+      font-weight: 700;
+      color: rgba(15,92,58,0.10);
+      line-height: 1;
+      position: absolute;
+      top: -8px;
+      right: 8px;
+      pointer-events: none;
+      user-select: none;
+    }
+    .step-card__title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-ink);
+      margin-bottom: 6px;
+      position: relative;
+    }
+    .step-card__desc {
+      font-size: 12px;
+      color: var(--color-muted);
+      line-height: 1.55;
+      position: relative;
+    }
+
+    /* ── 18. Testimonials ────────────────────────────────── */
+    .testimonial-card {
+      background: #fff;
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      border-left: 3px solid var(--color-sage);
+      box-shadow: var(--shadow-card);
+      margin-bottom: 12px;
+    }
+    .testimonial-card blockquote {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-size: 16px;
+      color: var(--color-ink);
+      line-height: 1.55;
+      margin-bottom: 16px;
+    }
+    .testimonial-card__author {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .avatar {
+      width: 40px; height: 40px;
+      background: var(--color-sage);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .testimonial-card__name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-ink);
+    }
+    .testimonial-card__role {
+      font-size: 12px;
+      color: var(--color-muted);
+    }
+    .stars { color: #f59e0b; font-size: 13px; margin-bottom: 3px; }
+
+    /* ── 19. Map teaser ──────────────────────────────────── */
+    .map-frame {
+      position: relative;
+      background: var(--color-surface);
+      border-radius: var(--radius-xl);
+      height: 220px;
+      overflow: hidden;
+      border: 1.5px solid rgba(15,92,58,0.12);
+      /* CSS grid lines */
+      background-image:
+        linear-gradient(rgba(15,92,58,0.12) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15,92,58,0.12) 1px, transparent 1px);
+      background-size: 15% 15%;
+      pointer-events: none;
+    }
+    .map-pin {
+      position: absolute;
+      width: 14px; height: 14px;
+    }
+    .map-pin__dot {
+      width: 14px; height: 14px;
+      background: var(--color-sage);
+      border-radius: 50%;
+      position: relative;
+      z-index: 1;
+    }
+    .map-pin__ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: rgba(15,92,58,0.4);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .map-pin__ring { animation: ping 1.8s ease-out infinite; }
+    }
+    .map-label-pill {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15,92,58,0.92);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 16px;
+      border-radius: 20px;
+      white-space: nowrap;
+      backdrop-filter: blur(4px);
+    }
+    .neighbourhoods {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .neighbourhood-tag {
+      font-size: 13px;
+      color: var(--color-muted);
+      background: rgba(15,92,58,0.07);
+      padding: 5px 12px;
+      border-radius: 20px;
+    }
+
+    /* ── 20. Shopkeeper section ──────────────────────────── */
+    .shopkeeper-section {
+      background: linear-gradient(160deg, #fffbf0 0%, #fef3c7 100%);
+      padding: 36px 20px;
+    }
+    .shopkeeper-section .eyebrow { color: var(--color-amber); }
+    .benefit-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin: 20px 0 24px;
+    }
+    .benefit-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .benefit-item__icon {
+      font-size: 22px;
+      flex-shrink: 0;
+      line-height: 1;
+      margin-top: 2px;
+    }
+    .benefit-item__title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--color-ink);
+      margin-bottom: 2px;
+    }
+    .benefit-item__desc {
+      font-size: 13px;
+      color: var(--color-muted);
+    }
+    .shopkeeper-cta-card {
+      background: var(--color-amber);
+      border-radius: var(--radius-xl);
+      padding: 24px 20px;
+      box-shadow: 0 8px 32px rgba(217,119,6,0.25);
+      text-align: center;
+    }
+    .shopkeeper-cta-card__title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .shopkeeper-cta-card__sub {
+      font-size: 13px;
+      color: rgba(255,255,255,0.82);
+      margin-bottom: 18px;
+    }
+    .shopkeeper-cta-card .btn {
+      background: var(--color-sage);
+      color: #fff;
+    }
+    .shopkeeper-cta-card .btn:hover { background: var(--color-sage-mid); }
+
+    /* ── 21. WhatsApp section ────────────────────────────── */
+    .wa-section {
+      background: #fff;
+      margin: 0 20px;
+      border-radius: var(--radius-xl);
+      border-left: 4px solid var(--color-wa);
+      padding: 24px 20px;
+      box-shadow: var(--shadow-card);
+    }
+    .wa-section__header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .wa-section__title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-ink);
+      line-height: 1.3;
+    }
+    .wa-section__sub {
+      font-size: 13px;
+      color: var(--color-muted);
+      margin-top: 12px;
+    }
+
+    /* ── 22. Footer ──────────────────────────────────────── */
+    .footer {
+      background: #111827;
+      padding: 28px 20px 20px;
+      margin-top: 40px;
+    }
+    .footer__top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+    }
+    .footer__wordmark {
+      font-family: var(--font-ui);
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .footer__wordmark .local { color: #fff; }
+    .footer__wordmark .buy   { color: #6ee7b7; }
+    .footer__tagline {
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+      margin-top: 4px;
+    }
+    .footer__links {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .footer__link {
+      font-size: 13px;
+      color: rgba(255,255,255,0.55);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .footer__link:hover { color: #fff; }
+    .footer__bottom {
+      padding-top: 16px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+      text-align: center;
+    }
+    .footer__bottom .heart    { color: #f87171; }
+    .footer__bottom .city     { color: #6ee7b7; }
   </style>
-
-  <!-- Deferred full CSS (non-blocking) -->
-  <link rel="stylesheet" href="css/main.css">
-  <link rel="stylesheet" href="css/animations.css">
 </head>
+
 <body>
+  <div class="page-wrap">
 
-  <!-- ═══════════════════════════════════════════════════════════════
-       INSTALL BANNER (sticky, sage green, dismissible)
-  ═══════════════════════════════════════════════════════════════════ -->
-  <div id="install-banner" class="install-banner" role="complementary" aria-label="Install LocalBuy app" style="display:none">
-    <div class="install-banner-left">
-      <strong>📲 Install LocalBuy</strong>
-      <span class="install-banner-sub">Works offline · No app store</span>
-    </div>
-    <div class="install-banner-right">
-      <button id="btn-install" class="install-btn" aria-label="Install LocalBuy as an app">Install</button>
-      <button id="btn-install-dismiss" class="install-dismiss" aria-label="Dismiss install banner">✕</button>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       NAVBAR (sticky, backdrop blur on scroll)
-  ═══════════════════════════════════════════════════════════════════ -->
-  <nav class="navbar" role="navigation" aria-label="Main navigation">
-    <a href="/" class="navbar-logo" aria-label="LocalBuy — go to homepage">
-      <!-- Hexagon SVG mark -->
-      <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M16 2L28.12 9V23L16 30L3.88 23V9L16 2Z" fill="var(--color-sage)"/>
-        <text x="16" y="21" text-anchor="middle" fill="white" font-family="DM Sans" font-weight="600" font-size="11">LB</text>
-      </svg>
-      <span class="logo-text">
-        <span class="logo-local">Local</span><span class="logo-buy">Buy</span>
-      </span>
-    </a>
-    <a href="shopkeeper.html" class="navbar-shop-link" aria-label="For shop owners">For Shops →</a>
-  </nav>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       HERO SECTION
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="hero stagger-parent" aria-labelledby="hero-heading">
-
-    <!-- Live badge -->
-    <div class="live-badge animate-child" role="status" aria-live="polite">
-      <span class="live-dot" aria-hidden="true"></span>
-      <span>Live in Guwahati · <strong>120+ shops</strong> open now</span>
+    <!-- ═══════════════════════════════════════════════════════════
+         § 4.1  INSTALL BANNER
+         ─────────────────────────────────────────────────────────
+         Hidden by default. app.js reveals it when beforeinstallprompt fires.
+         The `data-install` attribute is the hook app.js uses to find this element.
+    ══════════════════════════════════════════════════════════════ -->
+    <div id="install-banner" role="banner" aria-label="Install LocalBuy app" data-install-banner>
+      <div class="install-banner__text">
+        <strong>📲 Install LocalBuy</strong>
+        <span>Works offline · No app store</span>
+      </div>
+      <button class="install-banner__btn" data-install-trigger aria-label="Install the app">Install</button>
+      <button class="install-banner__dismiss" data-install-dismiss aria-label="Dismiss install banner">×</button>
     </div>
 
-    <!-- H1 -->
-    <h1 id="hero-heading" class="hero-heading animate-child">
-      Buy <em class="hero-em">local.</em><br>
-      Pick up <em class="hero-em">fast.</em>
-    </h1>
-
-    <!-- Subtitle -->
-    <p class="hero-subtitle animate-child">
-      Order from neighbourhood shops. Walk in when ready.<br>
-      No delivery. No minimum.
-    </p>
-
-    <!-- CTA Cards -->
-    <div class="hero-ctas animate-child" role="group" aria-label="Get started">
-      <a href="customer.html" class="cta-card cta-primary" aria-describedby="cta-customer-sub">
-        <span class="cta-title">I'm a Customer</span>
-        <span class="cta-sub" id="cta-customer-sub">Browse nearby shops &amp; order for pickup</span>
+    <!-- ═══════════════════════════════════════════════════════════
+         § 4.2  NAVBAR
+         ─────────────────────────────────────────────────────────
+         Sticky with backdrop-blur. Logo = SVG hexagon + wordmark.
+    ══════════════════════════════════════════════════════════════ -->
+    <nav class="navbar" role="navigation" aria-label="Main navigation">
+      <a href="/" class="navbar__logo" aria-label="LocalBuy home">
+        <!-- Hexagon mark — inline SVG, aria-hidden since wordmark follows -->
+        <svg width="32" height="36" viewBox="0 0 32 36" fill="none" aria-hidden="true"
+             xmlns="http://www.w3.org/2000/svg">
+          <path d="M16 1L30 9.5V26.5L16 35L2 26.5V9.5L16 1Z" fill="#0f5c3a"/>
+          <path d="M10 18.5C10 15.5 12.5 12.5 16 12C19.5 11.5 22 14 22 17.5C22 20 20 22.5 17 23.5" 
+                stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="16" cy="24" r="1.5" fill="white"/>
+        </svg>
+        <span class="navbar__wordmark">
+          <span class="local">Local</span><span class="buy">Buy</span>
+        </span>
       </a>
-      <a href="shopkeeper.html" class="cta-card cta-secondary" aria-describedby="cta-shop-sub">
-        <span class="cta-title">I'm a Shopkeeper</span>
-        <span class="cta-sub" id="cta-shop-sub">Manage your orders from the counter</span>
-      </a>
-    </div>
+      <a href="shopkeeper.html" class="navbar__link">For Shops →</a>
+    </nav>
 
-    <!-- Stats Row -->
-    <div class="stats-row animate-child" role="list" aria-label="LocalBuy statistics">
-      <div class="stat-item" role="listitem">
-        <span class="stat-value">120+</span>
-        <span class="stat-label">Local shops</span>
+    <!-- ═══════════════════════════════════════════════════════════
+         § 4.3  HERO SECTION
+         ─────────────────────────────────────────────────────────
+         All direct children carry .hero-animate for staggered fadeUp.
+         geo.js updates .live-badge text if location is confirmed.
+    ══════════════════════════════════════════════════════════════ -->
+    <section class="hero" aria-labelledby="hero-heading">
+      <!-- 1. Live badge -->
+      <div class="live-badge hero-animate" data-live-badge>
+        <span class="live-dot" aria-hidden="true"></span>
+        <span>Live in Guwahati · 120+ shops open now</span>
       </div>
-      <div class="stat-divider" aria-hidden="true"></div>
-      <div class="stat-item" role="listitem">
-        <span class="stat-value">4.8★</span>
-        <span class="stat-label">Avg. rating</span>
-      </div>
-      <div class="stat-divider" aria-hidden="true"></div>
-      <div class="stat-item" role="listitem">
-        <span class="stat-value">&lt;10 min</span>
-        <span class="stat-label">Ready time</span>
-      </div>
-    </div>
 
-    <!-- Trust Pills -->
-    <div class="trust-pills animate-child" role="list" aria-label="Key features">
-      <span class="trust-pill" role="listitem">✓ Works offline</span>
-      <span class="trust-pill" role="listitem">✓ UPI &amp; Cash</span>
-      <span class="trust-pill" role="listitem">✓ SMS alerts</span>
-      <span class="trust-pill" role="listitem">✓ No data stored</span>
-      <span class="trust-pill" role="listitem">✓ No delivery charges</span>
-    </div>
-  </section>
+      <!-- 2. H1 -->
+      <h1 class="hero__h1 hero-animate" id="hero-heading">
+        Buy <span class="accent">local.</span><br>
+        Pick up <span class="accent">fast.</span>
+      </h1>
 
-  <!-- ═══════════════════════════════════════════════════════════════
-       CATEGORIES + SHOP CARDS
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="shops-section" aria-labelledby="shops-heading">
-    <p class="section-eyebrow">Explore nearby</p>
-    <h2 id="shops-heading" class="visually-hidden">Browse shops by category</h2>
+      <!-- 3. Subtitle -->
+      <p class="hero__subtitle hero-animate">
+        Order from neighbourhood shops. Walk in when ready. No delivery. No minimum.
+      </p>
 
-    <!-- Category chips (horizontally scrollable) -->
-    <div class="category-scroll" role="group" aria-label="Filter by category">
-      <button class="category-chip active" data-category="all" aria-pressed="true">All</button>
-      <button class="category-chip" data-category="kirana" aria-pressed="false">🛒 Kirana</button>
-      <button class="category-chip" data-category="chemist" aria-pressed="false">💊 Chemist</button>
-      <button class="category-chip" data-category="stationery" aria-pressed="false">✏️ Stationery</button>
-      <button class="category-chip" data-category="bakery" aria-pressed="false">🎂 Bakery</button>
-      <button class="category-chip" data-category="dairy" aria-pressed="false">🥛 Dairy</button>
-      <button class="category-chip" data-category="beauty" aria-pressed="false">💄 Beauty</button>
-      <button class="category-chip" data-category="fish" aria-pressed="false">🐟 Fish &amp; Meat</button>
-    </div>
-
-    <!-- Shop Cards Grid -->
-    <div class="shop-grid" id="landing-shop-grid" role="list" aria-label="Nearby shops">
-      <!-- Cards injected by JS, 4 mock shops -->
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       HOW IT WORKS
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="how-section" aria-labelledby="how-heading">
-    <p class="section-eyebrow">How it works</p>
-    <h2 id="how-heading" class="section-heading">Order in seconds.<br>Collect when ready.</h2>
-
-    <div class="steps-grid" role="list">
-      <div class="step-card" role="listitem">
-        <span class="step-number" aria-hidden="true">01</span>
-        <h3 class="step-title">Find your shop</h3>
-        <p class="step-desc">Search by name, category, or item. See which shops are open right now.</p>
-      </div>
-      <div class="step-card" role="listitem">
-        <span class="step-number" aria-hidden="true">02</span>
-        <h3 class="step-title">Place your order</h3>
-        <p class="step-desc">Type your list or upload a photo of your handwritten note.</p>
-      </div>
-      <div class="step-card" role="listitem">
-        <span class="step-number" aria-hidden="true">03</span>
-        <h3 class="step-title">Get notified by SMS</h3>
-        <p class="step-desc">We text you when your order is packed and ready for collection.</p>
-      </div>
-      <div class="step-card" role="listitem">
-        <span class="step-number" aria-hidden="true">04</span>
-        <h3 class="step-title">Walk in &amp; go</h3>
-        <p class="step-desc">Show your order code at the counter. Skip the queue.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       TESTIMONIALS
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="testimonials-section" aria-labelledby="testimonials-heading">
-    <p class="section-eyebrow">What locals say</p>
-    <h2 id="testimonials-heading" class="section-heading">Trusted by Guwahati's community</h2>
-
-    <div class="testimonials-grid">
-      <blockquote class="testimonial-card">
-        <p class="testimonial-quote">
-          "I order my medicines before leaving the office. By the time I reach Pan Bazar, they're packed and waiting. It's changed my evenings."
-        </p>
-        <footer class="testimonial-footer">
-          <div class="testimonial-avatar" aria-hidden="true">PB</div>
-          <div class="testimonial-info">
-            <cite class="testimonial-name">Priyanka B.</cite>
-            <span class="testimonial-role muted">Regular customer · Ulubari</span>
-            <span class="testimonial-stars" aria-label="5 out of 5 stars">★★★★★</span>
-          </div>
-        </footer>
-      </blockquote>
-
-      <blockquote class="testimonial-card">
-        <p class="testimonial-quote">
-          "The counter rush during the evening used to be chaos. Since my regulars started ordering on LocalBuy, I can prepare in advance. It's cut the rush in half."
-        </p>
-        <footer class="testimonial-footer">
-          <div class="testimonial-avatar" aria-hidden="true">RK</div>
-          <div class="testimonial-info">
-            <cite class="testimonial-name">Rajesh Kalita</cite>
-            <span class="testimonial-role muted">Owner · Sharma General Store</span>
-            <span class="testimonial-stars" aria-label="5 out of 5 stars">★★★★★</span>
-          </div>
-        </footer>
-      </blockquote>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       MAP TEASER
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="map-section" aria-labelledby="map-heading">
-    <h2 id="map-heading" class="section-heading">120+ shops across Guwahati</h2>
-
-    <!-- Decorative CSS map frame -->
-    <div class="map-frame" role="img" aria-label="Map showing LocalBuy shops across Guwahati">
-      <!-- Pulsing map pins at varied positions -->
-      <div class="map-pin" style="top: 22%; left: 28%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-pin" style="top: 45%; left: 55%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-pin" style="top: 60%; left: 30%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-pin" style="top: 30%; left: 72%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-pin" style="top: 70%; left: 65%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-pin" style="top: 15%; left: 48%;" aria-hidden="true"><div class="map-pin-ring"></div></div>
-      <div class="map-label-pill">📍 Guwahati</div>
-    </div>
-
-    <p class="map-neighbourhoods" aria-label="Covered neighbourhoods">
-      Fancy Bazar · Pan Bazar · Paltan Bazar · Ulubari
-    </p>
-
-    <a href="customer.html" class="map-cta-link">See all shops →</a>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       SHOPKEEPER SECTION (warm saffron)
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="shopkeeper-section" aria-labelledby="shopkeeper-heading">
-    <p class="section-eyebrow shopkeeper-eyebrow">For shop owners</p>
-    <h2 id="shopkeeper-heading" class="section-heading">Grow without a delivery fleet.</h2>
-
-    <ul class="benefits-list">
-      <li class="benefit-item">
-        <span class="benefit-icon" aria-hidden="true">🚫</span>
-        <div>
-          <strong class="benefit-title">No commission for 3 months</strong>
-          <p class="benefit-desc muted">Start earning, not paying.</p>
-        </div>
-      </li>
-      <li class="benefit-item">
-        <span class="benefit-icon" aria-hidden="true">📱</span>
-        <div>
-          <strong class="benefit-title">Works on any Android phone</strong>
-          <p class="benefit-desc muted">No new hardware needed.</p>
-        </div>
-      </li>
-      <li class="benefit-item">
-        <span class="benefit-icon" aria-hidden="true">📣</span>
-        <div>
-          <strong class="benefit-title">Free WhatsApp kit on day 1</strong>
-          <p class="benefit-desc muted">Ready-made messages for your regulars.</p>
-        </div>
-      </li>
-      <li class="benefit-item">
-        <span class="benefit-icon" aria-hidden="true">⚡</span>
-        <div>
-          <strong class="benefit-title">5-minute setup</strong>
-          <p class="benefit-desc muted">We help you go live today.</p>
-        </div>
-      </li>
-    </ul>
-
-    <div class="shopkeeper-cta-card" role="region" aria-label="Register your shop">
-      <strong class="sk-cta-title">List my shop — it's free</strong>
-      <p class="sk-cta-sub muted">Takes 5 minutes. No tech knowledge needed.</p>
-      <a href="shopkeeper.html#register" class="btn btn-primary sk-cta-btn">Get started free →</a>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       WHATSAPP SHARE
-  ═══════════════════════════════════════════════════════════════════ -->
-  <section class="wa-share-section" aria-labelledby="wa-heading">
-    <div class="wa-share-card">
-      <!-- WhatsApp Logo SVG -->
-      <svg class="wa-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" width="36" height="36">
-        <circle cx="16" cy="16" r="16" fill="var(--color-wa)"/>
-        <path d="M22.5 9.5C20.8 7.8 18.5 6.8 16 6.8C10.9 6.8 6.8 10.9 6.8 16C6.8 17.7 7.3 19.4 8.1 20.8L6.8 25.2L11.3 24C12.7 24.7 14.3 25.1 16 25.1C21.1 25.1 25.2 21 25.2 15.9C25.2 13.4 24.2 11.2 22.5 9.5ZM16 23.5C14.5 23.5 13 23.1 11.8 22.4L11.5 22.2L8.7 23L9.5 20.3L9.2 20C8.4 18.7 8 17.4 8 16C8 11.6 11.6 8 16 8C18.1 8 20.1 8.8 21.5 10.2C22.9 11.6 23.8 13.7 23.8 15.9C23.8 20.3 20.4 23.5 16 23.5ZM20.3 18.1C20.1 18 19 17.5 18.8 17.4C18.6 17.3 18.5 17.3 18.4 17.5C18.3 17.7 17.9 18.2 17.8 18.4C17.7 18.5 17.6 18.5 17.4 18.4C16.3 17.9 15.5 17.5 14.7 16.3C14.5 16 14.9 16 15.2 15.4C15.3 15.3 15.3 15.2 15.2 15.1C15.1 15 14.7 13.9 14.5 13.4C14.3 12.9 14.1 13 14 13C13.9 13 13.8 13 13.6 13C13.5 13 13.2 13.1 13 13.3C12.8 13.5 12.2 14.1 12.2 15.2C12.2 16.3 13.1 17.4 13.2 17.5C13.4 17.7 14.7 19.7 16.7 20.5C18.2 21.1 18.8 21.2 19.5 21C20 20.9 21 20.4 21.2 19.8C21.5 19.2 21.5 18.7 21.4 18.6C21.4 18.3 20.5 18.2 20.3 18.1Z" fill="white"/>
-      </svg>
-      <div class="wa-share-text">
-        <h2 id="wa-heading" class="wa-heading">Share LocalBuy with friends in Guwahati</h2>
-        <p class="wa-sub muted">Word-of-mouth is how great things spread in Guwahati.</p>
-      </div>
-      <button
-        class="btn btn-wa btn-large wa-share-btn"
-        data-action="whatsapp-share"
-        aria-label="Share LocalBuy on WhatsApp"
-      >
-        Share on WhatsApp
-      </button>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       FOOTER
-  ═══════════════════════════════════════════════════════════════════ -->
-  <footer class="site-footer" role="contentinfo">
-    <div class="footer-top">
-      <div class="footer-brand">
-        <a href="/" class="footer-logo-link" aria-label="LocalBuy homepage">
-          <span class="footer-logo-local">Local</span><span class="footer-logo-buy">Buy</span>
+      <!-- 4. CTA cards -->
+      <div class="hero__ctas hero-animate">
+        <a href="customer.html" class="cta-card cta-card--primary"
+           aria-describedby="cta-customer-sub">
+          <span class="cta-card__title">I'm a Customer</span>
+          <span class="cta-card__sub" id="cta-customer-sub">
+            Browse nearby shops &amp; order for pickup
+          </span>
         </a>
-        <p class="footer-tagline muted">Guwahati's neighbourhood shops, online.</p>
+        <a href="shopkeeper.html" class="cta-card cta-card--secondary"
+           aria-describedby="cta-shop-sub">
+          <span class="cta-card__title">I'm a Shopkeeper</span>
+          <span class="cta-card__sub" id="cta-shop-sub">
+            Manage your orders from the counter
+          </span>
+        </a>
       </div>
-      <nav class="footer-links" aria-label="Footer navigation">
-        <a href="#" class="footer-link">Privacy</a>
-        <a href="#" class="footer-link">Terms</a>
-        <a href="#" class="footer-link">Contact</a>
-      </nav>
+
+      <!-- 5. Stats row -->
+      <div class="stats-row hero-animate" role="list" aria-label="Platform statistics">
+        <div class="stats-row__item" role="listitem">
+          <div class="stats-row__value">120+</div>
+          <div class="stats-row__label">Local shops</div>
+        </div>
+        <div class="stats-row__item" role="listitem">
+          <div class="stats-row__value">4.8★</div>
+          <div class="stats-row__label">Avg. rating</div>
+        </div>
+        <div class="stats-row__item" role="listitem">
+          <div class="stats-row__value">&lt;10 min</div>
+          <div class="stats-row__label">Ready time</div>
+        </div>
+      </div>
+
+      <!-- 6. Trust pills -->
+      <div class="trust-pills hero-animate" role="list" aria-label="Trust features">
+        <span class="trust-pill" role="listitem">✓ Works offline</span>
+        <span class="trust-pill" role="listitem">✓ UPI &amp; Cash</span>
+        <span class="trust-pill" role="listitem">✓ SMS alerts</span>
+        <span class="trust-pill" role="listitem">✓ No data stored</span>
+        <span class="trust-pill" role="listitem">✓ No delivery charges</span>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         § 4.4  CATEGORY + SHOP CARDS
+         ─────────────────────────────────────────────────────────
+         - Chips: JS in app.js handles .chip.active toggling +
+           card filtering via data-category attribute
+         - Cards: tap fires openShopModal(shopId) defined in customer.js
+         - Skeleton cards rendered first; replaced after MOCK_SHOPS load
+    ══════════════════════════════════════════════════════════════ -->
+    <section class="section" aria-labelledby="explore-heading">
+      <div class="section__header">
+        <p class="eyebrow">Explore nearby</p>
+        <h2 id="explore-heading" style="font-size:22px;margin-top:4px;">Shops in your neighbourhood</h2>
+      </div>
+
+      <!-- Category filter chips -->
+      <div class="category-chips" role="list" aria-label="Filter by category">
+        <button class="chip active" data-category="all" role="listitem" aria-pressed="true">
+          🛍️ All
+        </button>
+        <button class="chip" data-category="kirana" role="listitem" aria-pressed="false">
+          🛒 Kirana
+        </button>
+        <button class="chip" data-category="chemist" role="listitem" aria-pressed="false">
+          💊 Chemist
+        </button>
+        <button class="chip" data-category="stationery" role="listitem" aria-pressed="false">
+          ✏️ Stationery
+        </button>
+        <button class="chip" data-category="bakery" role="listitem" aria-pressed="false">
+          🎂 Bakery
+        </button>
+        <button class="chip" data-category="dairy" role="listitem" aria-pressed="false">
+          🥛 Dairy
+        </button>
+        <button class="chip" data-category="beauty" role="listitem" aria-pressed="false">
+          💄 Beauty
+        </button>
+        <button class="chip" data-category="fish" role="listitem" aria-pressed="false">
+          🐟 Fish &amp; Meat
+        </button>
+      </div>
+
+      <!-- Shop card grid — populated by app.js renderShopCards() -->
+      <div class="shop-grid" id="shop-grid" role="list" aria-label="Nearby shops">
+        <!--
+          TODO: These skeleton cards are replaced by app.js after MOCK_SHOPS resolves.
+          When Firebase is connected, db-bridge.js getShops() will return real data here.
+        -->
+        <!-- Skeleton placeholder cards shown during load -->
+        <div class="shop-card skeleton" aria-hidden="true">
+          <div class="shop-card__icon"></div>
+          <div class="shop-card__name" style="height:16px;width:80%;"></div>
+          <div class="shop-card__meta" style="height:12px;width:60%;margin-top:8px;"></div>
+        </div>
+        <div class="shop-card skeleton" aria-hidden="true">
+          <div class="shop-card__icon"></div>
+          <div class="shop-card__name" style="height:16px;width:80%;"></div>
+          <div class="shop-card__meta" style="height:12px;width:60%;margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <!-- "See all" link -->
+      <div style="text-align:center;margin-top:20px;">
+        <a href="customer.html" class="btn btn-outline" style="font-size:13px;height:40px;">
+          See all shops in Guwahati →
+        </a>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         § 4.5  HOW IT WORKS
+    ══════════════════════════════════════════════════════════════ -->
+    <section class="section" aria-labelledby="how-heading">
+      <div class="section__header">
+        <p class="eyebrow">How it works</p>
+        <h2 id="how-heading">Order in seconds.<br>Collect when ready.</h2>
+      </div>
+
+      <div class="steps-grid" role="list">
+        <div class="step-card" role="listitem">
+          <span class="step-card__number" aria-hidden="true">01</span>
+          <p class="step-card__title">Find your shop</p>
+          <p class="step-card__desc">Search by name, category, or item. Shops in Fancy Bazar to Ulubari.</p>
+        </div>
+        <div class="step-card" role="listitem">
+          <span class="step-card__number" aria-hidden="true">02</span>
+          <p class="step-card__title">Place your order</p>
+          <p class="step-card__desc">Type your list or upload a photo. Done in under a minute.</p>
+        </div>
+        <div class="step-card" role="listitem">
+          <span class="step-card__number" aria-hidden="true">03</span>
+          <p class="step-card__title">Get notified by SMS</p>
+          <p class="step-card__desc">We text you when it's packed. No app needed to receive alerts.</p>
+        </div>
+        <div class="step-card" role="listitem">
+          <span class="step-card__number" aria-hidden="true">04</span>
+          <p class="step-card__title">Walk in &amp; go</p>
+          <p class="step-card__desc">Show your order code at the counter. Skip the queue.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         § 4.6  TESTIMONIALS
+    ══════════════════════════════════════════════════════════════ -->
+    <section class="section" aria-labelledby="testimonials-heading">
+      <div class="section__header">
+        <p class="eyebrow">What locals say</p>
+        <h2 id="testimonials-heading">Trusted by Guwahati's community</h2>
+      </div>
+
+      <article class="testimonial-card">
+        <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
+        <blockquote>
+          "I ordered my medicines from City Medical Hall before leaving office in Panbazar. By the time I reached, everything was packed. No waiting, no queue."
+        </blockquote>
+        <div class="testimonial-card__author">
+          <div class="avatar" aria-hidden="true">PB</div>
+          <div>
+            <p class="testimonial-card__name">Priyanka B.</p>
+            <p class="testimonial-card__role">Regular customer · Ulubari</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="testimonial-card">
+        <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
+        <blockquote>
+          "The afternoon rush at my counter is cut by half. Customers come in, show their code, and leave. My helper doesn't spend time answering the same questions on the phone."
+        </blockquote>
+        <div class="testimonial-card__author">
+          <div class="avatar" aria-hidden="true">RK</div>
+          <div>
+            <p class="testimonial-card__name">Rajesh Kalita</p>
+            <p class="testimonial-card__role">Owner · Sharma General Store, Paltan Bazar</p>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         § 4.7  MAP TEASER
+         ─────────────────────────────────────────────────────────
+         Decorative CSS map with pulsing pins.
+         pointer-events: none on map-frame — purely visual.
+    ══════════════════════════════════════════════════════════════ -->
+    <section class="section" aria-labelledby="map-heading">
+      <div class="section__header">
+        <h2 id="map-heading" style="font-size:22px;">120+ shops across Guwahati</h2>
+      </div>
+
+      <div class="map-frame" role="img" aria-label="Decorative map showing shop locations across Guwahati">
+        <!-- 6 pulsing pins scattered across the map -->
+        <div class="map-pin" style="top:22%;left:28%" aria-hidden="true">
+          <div class="map-pin__ring"></div>
+          <div class="map-pin__dot"></div>
+        </div>
+        <div class="map-pin" style="top:55%;left:60%" aria-hidden="true">
+          <div class="map-pin__ring" style="animation-delay:0.4s"></div>
+          <div class="map-pin__dot"></div>
+        </div>
+        <div class="map-pin" style="top:35%;left:72%" aria-hidden="true">
+          <div class="map-pin__ring" style="animation-delay:0.8s"></div>
+          <div class="map-pin__dot"></div>
+        </div>
+        <div class="map-pin" style="top:70%;left:20%" aria-hidden="true">
+          <div class="map-pin__ring" style="animation-delay:1.2s"></div>
+          <div class="map-pin__dot"></div>
+        </div>
+        <div class="map-pin" style="top:18%;left:50%" aria-hidden="true">
+          <div class="map-pin__ring" style="animation-delay:0.2s"></div>
+          <div class="map-pin__dot"></div>
+        </div>
+        <div class="map-pin" style="top:62%;left:40%" aria-hidden="true">
+          <div class="map-pin__ring" style="animation-delay:1.0s"></div>
+          <div class="map-pin__dot"></div>
+        </div>
+
+        <!-- Location label pill -->
+        <div class="map-label-pill" aria-hidden="true">📍 Guwahati</div>
+      </div>
+
+      <!-- Neighbourhood tags -->
+      <div class="neighbourhoods" aria-label="Covered neighbourhoods">
+        <span class="neighbourhood-tag">Fancy Bazar</span>
+        <span class="neighbourhood-tag">Pan Bazar</span>
+        <span class="neighbourhood-tag">Paltan Bazar</span>
+        <span class="neighbourhood-tag">Ulubari</span>
+        <span class="neighbourhood-tag">Silpukhuri</span>
+      </div>
+
+      <div style="margin-top:16px;">
+        <a href="customer.html" class="btn btn-outline" style="font-size:14px;">
+          See all shops →
+        </a>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         § 4.8  SHOPKEEPER SECTION
+         ─────────────────────────────────────────────────────────
+         Warm amber background, separate from page-wrap background.
+    ══════════════════════════════════════════════════════════════ -->
+    <section class="shopkeeper-section" aria-labelledby="shopkeeper-heading">
+      <p class="eyebrow">For shop owners</p>
+      <h2 id="shopkeeper-heading" style="font-size:28px;margin-top:8px;margin-bottom:4px;">
+        Grow without a delivery fleet.
+      </h2>
+
+      <ul class="benefit-list" aria-label="Benefits for shopkeepers">
+        <li class="benefit-item">
+          <span class="benefit-item__icon" aria-hidden="true">🚫</span>
+          <div>
+            <p class="benefit-item__title">No commission for 3 months</p>
+            <p class="benefit-item__desc">Start earning, not paying. Join free and keep every rupee.</p>
+          </div>
+        </li>
+        <li class="benefit-item">
+          <span class="benefit-item__icon" aria-hidden="true">📱</span>
+          <div>
+            <p class="benefit-item__title">Works on any Android phone</p>
+            <p class="benefit-item__desc">No new hardware needed. Use the phone already on your counter.</p>
+          </div>
+        </li>
+        <li class="benefit-item">
+          <span class="benefit-item__icon" aria-hidden="true">📣</span>
+          <div>
+            <p class="benefit-item__title">Free WhatsApp kit on day 1</p>
+            <p class="benefit-item__desc">Ready-made messages for your regulars. Copy, paste, send.</p>
+          </div>
+        </li>
+        <li class="benefit-item">
+          <span class="benefit-item__icon" aria-hidden="true">⚡</span>
+          <div>
+            <p class="benefit-item__title">5-minute setup</p>
+            <p class="benefit-item__desc">We help you go live today. No tech knowledge needed.</p>
+          </div>
+        </li>
+      </ul>
+
+      <div class="shopkeeper-cta-card" aria-label="Register your shop">
+        <p class="shopkeeper-cta-card__title">List my shop — it's free</p>
+        <p class="shopkeeper-cta-card__sub">Takes 5 minutes. No tech knowledge needed.</p>
+        <a href="shopkeeper.html#register" class="btn" aria-label="List your shop on LocalBuy">
+          List my shop →
+        </a>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         § 4.9  WHATSAPP SHARE
+         ─────────────────────────────────────────────────────────
+         data-wa-share is the hook app.js uses to attach the click handler.
+         The Assamese share message is built in app.js shareViaWhatsApp().
+    ══════════════════════════════════════════════════════════════ -->
+    <div class="section" style="padding-top:0;">
+      <div class="wa-section" role="complementary" aria-label="Share LocalBuy">
+        <div class="wa-section__header">
+          <!-- WhatsApp logo SVG — official brand green -->
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true"
+               xmlns="http://www.w3.org/2000/svg">
+            <circle cx="18" cy="18" r="18" fill="#25d366"/>
+            <path d="M18 7C11.925 7 7 11.925 7 18C7 19.95 7.525 21.8 8.45 23.4L7 29L12.75 27.575C14.3 28.425 16.1 28.9 18 28.9C24.075 28.9 29 23.975 29 17.9C29 11.925 24.075 7 18 7ZM23.55 22.075C23.3 22.775 22.125 23.4 21.425 23.525C20.8 23.625 20 23.65 19.125 23.35C18.6 23.175 17.925 22.95 17.05 22.575C14.025 21.275 12.125 18.25 11.975 18.05C11.825 17.85 10.8 16.5 10.8 15.1C10.8 13.7 11.5 13.025 11.775 12.725C12.05 12.425 12.375 12.35 12.575 12.35C12.775 12.35 12.975 12.35 13.15 12.375C13.35 12.4 13.6 12.3 13.85 12.9L14.8 15.2C14.9 15.425 14.95 15.675 14.8 15.9C14.65 16.15 14.575 16.3 14.375 16.525C14.175 16.75 13.95 17.025 13.775 17.2C13.575 17.4 13.375 17.625 13.6 18.025C13.825 18.425 14.6 19.65 15.7 20.625C17.1 21.875 18.275 22.275 18.675 22.45C19.075 22.625 19.3 22.6 19.525 22.35C19.75 22.1 20.5 21.2 20.75 20.8C21 20.4 21.25 20.45 21.6 20.6C21.95 20.75 23.35 21.45 23.725 21.65C24.1 21.85 24.35 21.95 24.425 22.1C24.5 22.3 24.5 22.85 24.275 23.55L23.55 22.075Z" fill="white"/>
+          </svg>
+          <p class="wa-section__title">Share LocalBuy with friends in Guwahati</p>
+        </div>
+
+        <!--
+          data-wa-share: app.js attaches shareViaWhatsApp() to this button.
+          The message uses Assamese script — see app.js for the full string.
+        -->
+        <button class="btn btn-wa" style="width:100%;font-size:15px;" data-wa-share>
+          Share on WhatsApp
+        </button>
+
+        <p class="wa-section__sub">Word-of-mouth is how great things spread in Guwahati.</p>
+      </div>
     </div>
-    <hr class="footer-divider" aria-hidden="true">
-    <p class="footer-bottom">
-      © 2026 LocalBuy — Made with <span class="footer-heart" aria-hidden="true">❤️</span>
-      <span class="visually-hidden">love</span> for
-      <span class="footer-city">Guwahati's local markets</span>
-    </p>
-  </footer>
 
-  <!-- ═══════════════════════════════════════════════════════════════
-       SCRIPTS (deferred, non-blocking)
-  ═══════════════════════════════════════════════════════════════════ -->
-  <script src="js/sw-register.js" defer></script>
-  <script src="js/app.js" defer></script>
+    <!-- ═══════════════════════════════════════════════════════════
+         § 4.10  FOOTER
+    ══════════════════════════════════════════════════════════════ -->
+    <footer class="footer" role="contentinfo">
+      <div class="footer__top">
+        <div>
+          <div class="footer__wordmark">
+            <span class="local">Local</span><span class="buy">Buy</span>
+          </div>
+          <p class="footer__tagline">Your neighbourhood, online.</p>
+        </div>
+        <nav class="footer__links" aria-label="Footer links">
+          <a href="#" class="footer__link">Privacy</a>
+          <a href="#" class="footer__link">Terms</a>
+          <a href="#" class="footer__link">Contact</a>
+        </nav>
+      </div>
+      <p class="footer__bottom">
+        © 2026 LocalBuy —
+        Made with <span class="heart" aria-label="love">❤️</span> for
+        <span class="city">Guwahati's local markets</span>
+      </p>
+    </footer>
 
-  <!-- Landing-specific inline script for category filter + shop cards -->
-  <script defer>
-    document.addEventListener('DOMContentLoaded', () => {
-      // ── Render landing shop cards ──────────────────────────────────
-      const MOCK_SHOPS = [
-        { id: 's1', name: 'Sharma General Store', category: 'kirana',  emoji: '🛒', distance: '0.3 km', ready: '8 min',  status: 'open',   area: 'Fancy Bazar' },
-        { id: 's2', name: 'City Medical Hall',     category: 'chemist', emoji: '💊', distance: '0.5 km', ready: '5 min',  status: 'busy',   area: 'Pan Bazar' },
-        { id: 's3', name: 'Maa Kamakhya Bakery',  category: 'bakery',  emoji: '🎂', distance: '0.8 km', ready: '12 min', status: 'open',   area: 'Paltan Bazar' },
-        { id: 's4', name: 'Krishna Dairy Corner', category: 'dairy',   emoji: '🥛', distance: '1.1 km', ready: '6 min',  status: 'closed', area: 'Ulubari' }
-      ];
+  </div><!-- /.page-wrap -->
 
-      const grid = document.getElementById('landing-shop-grid');
-      if (grid) {
-        MOCK_SHOPS.forEach(shop => {
-          const statusLabel = { open: 'Open', busy: 'Busy', closed: 'Closed' }[shop.status];
-          const card = document.createElement('a');
-          card.href = `customer.html`;
-          card.className = 'shop-card';
-          card.setAttribute('data-category', shop.category);
-          card.setAttribute('role', 'listitem');
-          card.setAttribute('aria-label', `${shop.name} — ${statusLabel}, ${shop.distance}`);
-          card.innerHTML = `
-            <div class="shop-card-icon" aria-hidden="true">${shop.emoji}</div>
-            <div class="shop-card-body">
-              <h3 class="shop-card-name">${shop.name}</h3>
-              <p class="shop-card-meta">${shop.distance} · Ready in ${shop.ready}</p>
-            </div>
-            <span class="status-badge status-${shop.status}">
-              <span class="status-dot" aria-hidden="true"></span>${statusLabel}
-            </span>
-          `;
-          grid.appendChild(card);
+  <!-- ═══════════════════════════════════════════════════════════
+       JS FILES — defer-loaded, no render blocking
+       ─────────────────────────────────────────────────────────
+       Order matters:
+         1. sw-register.js  — must run ASAP (but non-blocking)
+         2. geo.js          — GPS utilities, no DOM dependency
+         3. db-bridge.js    — data stubs, needed by app.js
+         4. app.js          — main landing page logic (last)
+  ══════════════════════════════════════════════════════════════ -->
+
+  <!-- Service worker registration — runs after page loads -->
+  <script defer src="js/sw-register.js"></script>
+
+  <!-- Geolocation utilities -->
+  <script defer src="js/geo.js"></script>
+
+  <!-- Firebase-ready data stubs -->
+  <script defer src="js/db-bridge.js"></script>
+
+  <!-- Main landing page logic:
+       - Install banner (beforeinstallprompt → prompt())
+       - renderShopCards(MOCK_SHOPS) into #shop-grid
+       - Category chip filtering
+       - WhatsApp share handler
+       - initLocationBadge() from geo.js
+  -->
+  <script defer src="js/app.js"></script>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       INLINE BOOT SCRIPT
+       ─────────────────────────────────────────────────────────
+       Minimum logic that must run synchronously before deferred
+       scripts execute. Only contains critical localStorage reads.
+  ══════════════════════════════════════════════════════════════ -->
+  <script>
+    /**
+     * Boot: check if install banner was previously dismissed.
+     * Kept inline so the banner isn't shown then immediately hidden
+     * (which would cause layout shift).
+     */
+    (function() {
+      if (localStorage.getItem('lb_install_dismissed') === '1') {
+        // Banner will stay display:none — no flicker
+        document.addEventListener('DOMContentLoaded', function() {
+          var banner = document.getElementById('install-banner');
+          if (banner) banner.style.display = 'none';
         });
       }
-
-      // ── Category chip filter (landing page) ────────────────────────
-      const chips = document.querySelectorAll('.category-chip');
-      chips.forEach(chip => {
-        chip.addEventListener('click', () => {
-          chips.forEach(c => { c.classList.remove('active'); c.setAttribute('aria-pressed', 'false'); });
-          chip.classList.add('active');
-          chip.setAttribute('aria-pressed', 'true');
-
-          const cat = chip.dataset.category;
-          const cards = grid?.querySelectorAll('.shop-card');
-          if (!cards) return;
-
-          grid.style.opacity = '0';
-          grid.style.transition = 'opacity 0.2s ease';
-          setTimeout(() => {
-            cards.forEach(card => {
-              const cardCat = card.dataset.category;
-              card.style.display = (cat === 'all' || cardCat === cat) ? '' : 'none';
-            });
-            grid.style.opacity = '1';
-          }, 200);
-        });
-      });
-
-      // ── Navbar scroll effect ───────────────────────────────────────
-      const navbar = document.querySelector('.navbar');
-      window.addEventListener('scroll', () => {
-        navbar?.classList.toggle('scrolled', window.scrollY > 20);
-      }, { passive: true });
-    });
+    })();
   </script>
 
 </body>
