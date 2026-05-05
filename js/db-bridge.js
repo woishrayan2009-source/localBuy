@@ -20,6 +20,10 @@
 
 /* ─── Mock data (remove when Firebase is live) ──────────────────────────── */
 
+// FIX C1: MOCK_SHOPS is declared ONLY here. customer.js no longer declares
+// its own MOCK_SHOPS, eliminating the "Cannot redeclare block-scoped variable"
+// ReferenceError. customer.js accesses shops via the window.MOCK_SHOPS global
+// exported at the bottom of this file.
 const MOCK_SHOPS = [
   {
     id: 's1',
@@ -131,33 +135,37 @@ const MOCK_SHOPS = [
   }
 ];
 
-/* Mock reviews per shop */
+/* Mock reviews per shop
+ * FIX: Added `initials` field to every review object.
+ * customer.js renderReviews() uses r.initials to populate the avatar element.
+ * Without this field the avatar rendered as blank/undefined text.
+ */
 const MOCK_REVIEWS = {
   s1: [
-    { name: 'Priyanka B.', rating: 5, text: 'Quick and easy. Ordered from office, walked in on the way home. Rajesh bhaiya always keeps things ready!', date: '2 days ago' },
-    { name: 'Amit D.',     rating: 5, text: 'Best kirana in Fancy Bazar. Never out of stock for essentials.', date: '1 week ago' },
-    { name: 'Meena K.',    rating: 4, text: 'Good service. Slight wait time but staff is helpful.', date: '2 weeks ago' }
+    { initials: 'PB', name: 'Priyanka B.', role: 'Regular customer', rating: 5, text: 'Quick and easy. Ordered from office, walked in on the way home. Rajesh bhaiya always keeps things ready!', date: '2 days ago' },
+    { initials: 'AD', name: 'Amit D.',     role: 'Verified buyer',   rating: 5, text: 'Best kirana in Fancy Bazar. Never out of stock for essentials.', date: '1 week ago' },
+    { initials: 'MK', name: 'Meena K.',    role: 'Local resident',   rating: 4, text: 'Good service. Slight wait time but staff is helpful.', date: '2 weeks ago' }
   ],
   s2: [
-    { name: 'Dr. S. Hazarika', rating: 5, text: 'Always have the medicines I need. No waiting. Perfect.', date: '3 days ago' },
-    { name: 'Rupa B.',         rating: 5, text: 'Ordered rare BP medicines — ready in 4 minutes. Impressive.', date: '5 days ago' },
-    { name: 'Tarun G.',        rating: 5, text: 'Very professional. Staff double-checks prescriptions.', date: '1 week ago' }
+    { initials: 'SH', name: 'Dr. S. Hazarika', role: 'Physician',         rating: 5, text: 'Always have the medicines I need. No waiting. Perfect.', date: '3 days ago' },
+    { initials: 'RB', name: 'Rupa B.',          role: 'Regular customer',  rating: 5, text: 'Ordered rare BP medicines — ready in 4 minutes. Impressive.', date: '5 days ago' },
+    { initials: 'TG', name: 'Tarun G.',          role: 'Verified buyer',    rating: 5, text: 'Very professional. Staff double-checks prescriptions.', date: '1 week ago' }
   ],
   s3: [
-    { name: 'Sunita P.',  rating: 5, text: 'Ordered birthday cake from office. It was ready when I walked in. Delicious!', date: '1 day ago' },
-    { name: 'Kamal N.',   rating: 4, text: 'Great momos every Saturday. Worth the walk from Paltan Bazar.', date: '4 days ago' },
-    { name: 'Lily B.',    rating: 5, text: 'Freshest bread in the neighbourhood. Always warm.', date: '1 week ago' }
+    { initials: 'SP', name: 'Sunita P.',  role: 'Regular customer', rating: 5, text: 'Ordered birthday cake from office. It was ready when I walked in. Delicious!', date: '1 day ago' },
+    { initials: 'KN', name: 'Kamal N.',   role: 'Local resident',   rating: 4, text: 'Great momos every Saturday. Worth the walk from Paltan Bazar.', date: '4 days ago' },
+    { initials: 'LB', name: 'Lily B.',    role: 'Verified buyer',   rating: 5, text: 'Freshest bread in the neighbourhood. Always warm.', date: '1 week ago' }
   ],
   s4: [
-    { name: 'Bhaswati C.', rating: 5, text: 'Pure milk, no dilution. Best paneer in Ulubari!', date: '2 days ago' },
-    { name: 'Hemen S.',    rating: 4, text: 'Early morning pickup works perfectly for daily milk.', date: '3 days ago' },
-    { name: 'Ankita D.',   rating: 5, text: 'Ghee quality is excellent. Worth the early wake-up.', date: '1 week ago' }
+    { initials: 'BC', name: 'Bhaswati C.', role: 'Daily customer',  rating: 5, text: 'Pure milk, no dilution. Best paneer in Ulubari!', date: '2 days ago' },
+    { initials: 'HS', name: 'Hemen S.',    role: 'Regular buyer',   rating: 4, text: 'Early morning pickup works perfectly for daily milk.', date: '3 days ago' },
+    { initials: 'AD', name: 'Ankita D.',   role: 'Local resident',  rating: 5, text: 'Ghee quality is excellent. Worth the early wake-up.', date: '1 week ago' }
   ],
   s5: [],
   s6: [
-    { name: 'Dilip B.',    rating: 5, text: 'Always fresh catch. Rohu was packed and ready to cook!', date: '1 day ago' },
-    { name: 'Maya R.',     rating: 4, text: 'Good fish, very fresh. Bit busy in mornings.', date: '3 days ago' },
-    { name: 'Pankaj S.',   rating: 5, text: 'Best hilsa in Guwahati. They know their fish!', date: '5 days ago' }
+    { initials: 'DB', name: 'Dilip B.',    role: 'Regular customer', rating: 5, text: 'Always fresh catch. Rohu was packed and ready to cook!', date: '1 day ago' },
+    { initials: 'MR', name: 'Maya R.',     role: 'Local resident',   rating: 4, text: 'Good fish, very fresh. Bit busy in mornings.', date: '3 days ago' },
+    { initials: 'PS', name: 'Pankaj S.',   role: 'Verified buyer',   rating: 5, text: 'Best hilsa in Guwahati. They know their fish!', date: '5 days ago' }
   ]
 };
 
