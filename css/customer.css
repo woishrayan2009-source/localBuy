@@ -646,9 +646,9 @@
   border-radius: 100px;
 }
 
-/* Modal CTA area */
-.modal-cta { /* filled by JS */ }
-
+.modal-cta {
+  display: block; /* Baseline style before JS fills it */
+}
 
 /* ─── 4. ORDER SECTION ─────────────────────────────────────────────── */
 
