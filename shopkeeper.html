@@ -149,7 +149,7 @@
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
           <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <span data-i18n="nav.back">Back</span>
+        <span data-i18n="common.back">Back</span>
       </a>
       <!-- Language toggle -->
       <div class="lang-toggle" role="group" aria-label="Language selector">
@@ -163,10 +163,10 @@
     <div class="register-hero">
       <!-- Amber warm badge -->
       <span class="eyebrow-badge amber" data-i18n="register.badge">For Guwahati shop owners</span>
-      <h1 class="register-headline font-display" data-i18n="register.headline">
+      <h1 class="register-headline font-display" data-i18n="register.title">
         List your shop.<br><em>It's free.</em>
       </h1>
-      <p class="register-sub" data-i18n="register.sub">Takes 5 minutes. No tech knowledge needed.</p>
+      <p class="register-sub" data-i18n="register.subtitle">Takes 5 minutes. No tech knowledge needed.</p>
 
       <!-- Benefits row -->
       <ul class="benefit-list" role="list">
@@ -209,7 +209,7 @@
 
       <!-- Shop name -->
       <div class="field-group">
-        <label for="input-shop-name" class="field-label" data-i18n="form.shopName">Shop name</label>
+        <label for="input-shop-name" class="field-label" data-i18n="register.shopName">Shop name</label>
         <input type="text"
                id="input-shop-name"
                class="field-input"
@@ -221,7 +221,7 @@
 
       <!-- Owner name -->
       <div class="field-group">
-        <label for="input-owner-name" class="field-label" data-i18n="form.ownerName">Your name</label>
+        <label for="input-owner-name" class="field-label" data-i18n="register.ownerName">Your name</label>
         <input type="text"
                id="input-owner-name"
                class="field-input"
@@ -233,7 +233,7 @@
 
       <!-- Category -->
       <div class="field-group">
-        <label for="input-category" class="field-label" data-i18n="form.category">Shop category</label>
+        <label for="input-category" class="field-label" data-i18n="register.category">Shop category</label>
         <select id="input-category" class="field-input field-select" required>
           <option value="" disabled selected data-i18n="form.selectCategory">Select a category</option>
           <option value="kirana"     data-i18n="cat.kirana">🛒 Kirana / General Store</option>
@@ -248,7 +248,7 @@
 
       <!-- Area / neighbourhood -->
       <div class="field-group">
-        <label for="input-area" class="field-label" data-i18n="form.area">Neighbourhood / Area</label>
+        <label for="input-area" class="field-label" data-i18n="register.area">Neighbourhood / Area</label>
         <input type="text"
                id="input-area"
                class="field-input"
@@ -271,7 +271,7 @@
 
       <!-- Phone -->
       <div class="field-group">
-        <label for="input-phone" class="field-label" data-i18n="form.phone">WhatsApp number</label>
+        <label for="input-phone" class="field-label" data-i18n="register.phone">WhatsApp number</label>
         <!-- TODO: Customer phone numbers stored only in order objects.
              Encrypt at rest in Firebase, never log to console in production. -->
         <div class="input-prefix-wrap">

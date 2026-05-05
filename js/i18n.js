@@ -12,6 +12,34 @@ const STRINGS = {
 
   // ── English ──────────────────────────────────────────────
   en: {
+    // Add these to the 'en' block in i18n.js
+'register.badge': 'For Guwahati shop owners',
+'benefit.noCommission.title': 'No commission for 3 months',
+'benefit.noCommission.sub': 'Start earning, not paying',
+'benefit.anyPhone.title': 'Works on any Android phone',
+'benefit.anyPhone.sub': 'No new hardware needed',
+'benefit.waKit.title': 'Free WhatsApp kit on day 1',
+'benefit.waKit.sub': 'Ready-made messages for your regulars',
+'benefit.setup.title': '5-minute setup',
+'benefit.setup.sub': 'We help you go live today',
+'register.formHeading': 'Set up your shop',
+'form.selectCategory': 'Select a category',
+'cat.kirana': '🛒 Kirana / General Store',
+'cat.chemist': '💊 Chemist / Medical',
+'cat.stationery': '✏️ Stationery',
+'cat.bakery': '🎂 Bakery',
+'cat.dairy': '🥛 Dairy',
+'cat.beauty': '💄 Beauty',
+'cat.fish': '🐟 Fish & Meat',
+'form.phoneHint': 'We only use this to send you order alerts.',
+'form.hours': 'Shop hours',
+'form.opensAt': 'Opens at',
+'form.closesAt': 'Closes at',
+'form.lastOrder': 'Last order accepted at',
+'form.upiId': 'UPI ID (optional)',
+'form.upiHint': 'Lets customers pay online. Safe & optional.',
+'register.legal': 'By continuing you agree to our Terms. No spam, ever.',
+
     // Shift management
     'shift.greeting':        'Good morning',
     'shift.statusOffline':   '🔴 Offline — Shop is hidden from customers',
@@ -480,4 +508,5 @@ const i18n = (() => {
   document.addEventListener('DOMContentLoaded', render);
 
   return { t, setLang, getLang, render, formatCurrency, formatNumber };
+  window.i18n = i18n;
 })();
