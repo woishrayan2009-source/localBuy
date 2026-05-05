@@ -143,6 +143,63 @@ const STRINGS = {
     'common.save':    'Save',
     'common.back':    'Back',
     'common.mins':    'mins',
+
+    // ── Aliases (HTML uses these key names)
+'shift.offline':     '🔴 Offline — Shop is hidden from customers',
+'shift.start':       'Start Shift — Go Online',
+'shift.end':         'End Shift',
+'shift.hint':        'Your shop will become visible to customers in your area.',
+'shift.hoursToday':  'Today: {open} – {close}',
+'shift.yesterday':   'Yesterday',
+
+// ── Stats
+'stats.orders':      'Orders',
+'stats.earnings':    'Earnings',
+'stats.avgTime':     'Avg. ready',
+'stats.ordersToday': 'Orders today',
+'stats.earningsToday':'Earnings today',
+'stats.avgReady':    'Avg. ready time',
+
+// ── Tabs
+'tab.orders':        'Orders',
+'tab.inventory':     'Quick OOS',
+
+// ── Orders feed
+'orders.emptyTitle': 'No active orders',
+'orders.emptySub':   'New orders will appear here with a sound alert.',
+'pull.refresh':      'Pull to refresh',
+
+// ── OOS panel
+'oos.intro':         'Mark items out of stock. This auto-notes your next quotes.',
+'oos.clearAll':      'Clear all',
+'oos.placeholder':   'Add item…',
+'oos.add':           '+ Add',
+
+// ── Order action panel
+'panel.customerOrder':       "Customer's order",
+'panel.photoList':           'Photo list',
+'panel.yourResponse':        'Your response',
+'panel.billAmount':          'Total bill amount',
+'panel.subNotes':            'Notes for customer (optional)',
+'panel.subNotesPlaceholder': 'e.g., No Tata Salt — added Captain Cook 1kg ✓\nMaggi not available today.',
+'panel.quickOos':            'Quick OOS this order',
+'panel.sendQuote':           'Send Quote to Customer',
+'panel.markPacking':         'Mark as Packing',
+'panel.markReady':           'Ready for Pickup 🎉',
+'panel.cancelOrder':         'Cancel order',
+
+// ── Shift end screen
+'shiftEnd.title':           'Shift complete!',
+'shiftEnd.sub':             'Your shop is now offline. See you tomorrow.',
+'shiftEnd.exportWA':        'Export summary to WhatsApp',
+'shiftEnd.done':            'Done — see you tomorrow',
+'shiftEnd.pendingWarning':  'Some orders are still pending. Contact customers directly.',
+
+// ── Summary card
+'summary.ordersCompleted':  'Orders completed',
+'summary.earnings':         'Total earnings',
+'summary.avgTime':          'Avg. fulfillment time',
+'summary.shiftDuration':    'Shift duration',
   },
 
   // ── Hindi ─────────────────────────────────────────────────
@@ -232,6 +289,66 @@ const STRINGS = {
     'common.save':    'सहेजें',
     'common.back':    'वापस',
     'common.mins':    'मिनट',
+
+    // ── Aliases (HTML uses these key names)
+'shift.offline':     '🔴 ऑफ़लाइन — दुकान ग्राहकों से छिपी हुई है',
+'shift.start':       'शिफ्ट शुरू करें — ऑनलाइन जाएँ',
+'shift.end':         'शिफ्ट समाप्त करें',
+'shift.hint':        'आपकी दुकान आपके क्षेत्र के ग्राहकों को दिखाई देने लगेगी।',
+'shift.hoursToday':  'आज: {open} – {close}',
+'shift.yesterday':   'कल',
+
+// ── Stats
+'stats.orders':      'ऑर्डर',
+'stats.earnings':    'कमाई',
+'stats.avgTime':     'औसत तैयार',
+'stats.ordersToday': 'आज के ऑर्डर',
+'stats.earningsToday':'आज की कमाई',
+'stats.avgReady':    'औसत तैयारी का समय',
+
+// ── Tabs
+'tab.orders':        'ऑर्डर',
+'tab.inventory':     'क्विक OOS',
+
+// ── Orders feed
+'orders.emptyTitle': 'कोई सक्रिय ऑर्डर नहीं',
+'orders.emptySub':   'नए ऑर्डर ध्वनि अलर्ट के साथ यहाँ दिखाई देंगे।',
+'pull.refresh':      'रिफ्रेश करने के लिए खींचें',
+
+// ── OOS panel
+'oos.intro':         'आइटम्स को आउट ऑफ स्टॉक मार्क करें। यह आपके अगले कोट्स में अपने आप नोट हो जाएगा।',
+'oos.clearAll':      'सभी साफ़ करें',
+'oos.placeholder':   'आइटम जोड़ें…',
+'oos.add':           '+ जोड़ें',
+
+// ── Order action panel
+'panel.customerOrder':       'ग्राहक का ऑर्डर',
+'panel.photoList':           'फोटो सूची',
+'panel.yourResponse':        'आपका जवाब',
+'panel.billAmount':          'कुल बिल राशि',
+'panel.subNotes':            'ग्राहक के लिए नोट (वैकल्पिक)',
+'panel.subNotesPlaceholder': 'उदा. टाटा नमक नहीं है — कैप्टन कुक 1 किलो जोड़ा गया ✓\nमैगी आज उपलब्ध नहीं है।',
+'panel.quickOos':            'इस ऑर्डर में क्विक OOS करें',
+'panel.sendQuote':           'ग्राहक को कोट (Quote) भेजें',
+'panel.markPacking':         'पैकिंग के रूप में मार्क करें',
+'panel.markReady':           'पिकअप के लिए तैयार 🎉',
+'panel.cancelOrder':         'ऑर्डर रद्द करें',
+
+// ── Shift end screen
+'shiftEnd.title':           'शिफ्ट पूरी हुई!',
+'shiftEnd.sub':             'आपकी दुकान अब ऑफ़लाइन है। कल मिलते हैं।',
+'shiftEnd.exportWA':        'WhatsApp पर सारांश एक्सपोर्ट करें',
+'shiftEnd.done':            'हो गया — कल मिलते हैं',
+'shiftEnd.pendingWarning':  'कुछ ऑर्डर अभी भी लंबित हैं। ग्राहकों से सीधे संपर्क करें।',
+
+// ── Summary card
+'summary.ordersCompleted':  'पूरे किए गए ऑर्डर',
+'summary.earnings':         'कुल कमाई',
+'summary.avgTime':          'औसत पूर्ति समय',
+'summary.shiftDuration':    'शिफ्ट की अवधि',
+
+// In hi:
+'register.badge': 'गुवाहाटी के दुकानदारों के लिए',
   },
 
   // ── Bengali ───────────────────────────────────────────────
@@ -320,6 +437,66 @@ const STRINGS = {
     'common.save':    'সংরক্ষণ',
     'common.back':    'ফিরে যান',
     'common.mins':    'মিনিট',
+
+    // ── Aliases (HTML uses these key names)
+'shift.offline':     '🔴 অফলাইন — দোকান গ্রাহকদের থেকে লুকানো আছে',
+'shift.start':       'শিফট শুরু করুন — অনলাইন যান',
+'shift.end':         'শিফট শেষ করুন',
+'shift.hint':        'আপনার দোকান আপনার এলাকার গ্রাহকদের কাছে দৃশ্যমান হবে।',
+'shift.hoursToday':  'আজ: {open} – {close}',
+'shift.yesterday':   'গতকাল',
+
+// ── Stats
+'stats.orders':      'অর্ডার',
+'stats.earnings':    'উপার্জন',
+'stats.avgTime':     'গড় প্রস্তুত',
+'stats.ordersToday': 'আজকের অর্ডার',
+'stats.earningsToday':'আজকের উপার্জন',
+'stats.avgReady':    'গড় প্রস্তুতির সময়',
+
+// ── Tabs
+'tab.orders':        'অর্ডার',
+'tab.inventory':     'কুইক OOS',
+
+// ── Orders feed
+'orders.emptyTitle': 'কোনো সক্রিয় অর্ডার নেই',
+'orders.emptySub':   'নতুন অর্ডারগুলি একটি সাউন্ড অ্যালার্টের সাথে এখানে প্রদর্শিত হবে৷',
+'pull.refresh':      'রিফ্রেশ করতে টানুন',
+
+// ── OOS panel
+'oos.intro':         'আইটেমগুলিকে আউট অফ স্টক হিসেবে চিহ্নিত করুন। এটি আপনার পরবর্তী কোটগুলিতে স্বয়ংক্রিয়ভাবে নোট হয়ে যাবে।',
+'oos.clearAll':      'সব মুছুন',
+'oos.placeholder':   'আইটেম যোগ করুন…',
+'oos.add':           '+ যোগ করুন',
+
+// ── Order action panel
+'panel.customerOrder':       'গ্রাহকের অর্ডার',
+'panel.photoList':           'ফটো তালিকা',
+'panel.yourResponse':        'আপনার উত্তর',
+'panel.billAmount':          'মোট বিলের পরিমাণ',
+'panel.subNotes':            'গ্রাহকের জন্য নোট (ঐচ্ছিক)',
+'panel.subNotesPlaceholder': 'উদা. টাটা সল্ট নেই — ক্যাপ্টেন কুক ১ কেজি যোগ করা হয়েছে ✓\nম্যাগি আজ উপলব্ধ নেই।',
+'panel.quickOos':            'এই অর্ডারে কুইক OOS করুন',
+'panel.sendQuote':           'গ্রাহককে কোট (Quote) পাঠান',
+'panel.markPacking':         'প্যাকিং হিসেবে চিহ্নিত করুন',
+'panel.markReady':           'পিকআপের জন্য প্রস্তুত 🎉',
+'panel.cancelOrder':         'অর্ডার বাতিল করুন',
+
+// ── Shift end screen
+'shiftEnd.title':           'শিফট সম্পন্ন হয়েছে!',
+'shiftEnd.sub':             'আপনার দোকান এখন অফলাইনে আছে। আগামীকাল দেখা হবে।',
+'shiftEnd.exportWA':        'WhatsApp-এ সারাংশ এক্সপোর্ট করুন',
+'shiftEnd.done':            'হয়ে গেছে — আগামীকাল দেখা হবে',
+'shiftEnd.pendingWarning':  'কিছু অর্ডার এখনও পেন্ডিং আছে। গ্রাহকদের সাথে সরাসরি যোগাযোগ করুন।',
+
+// ── Summary card
+'summary.ordersCompleted':  'সম্পন্ন হওয়া অর্ডার',
+'summary.earnings':         'মোট উপার্জন',
+'summary.avgTime':          'অর্ডার প্রস্তুত হওয়ার গড় সময়',
+'summary.shiftDuration':    'শিফটের সময়কাল',
+
+// In bn:
+'register.badge': 'গুয়াহাটির দোকান মালিকদের জন্য',
   },
 
   // ── Assamese ──────────────────────────────────────────────
@@ -408,6 +585,66 @@ const STRINGS = {
     'common.save':    'সংৰক্ষণ',
     'common.back':    'উভতি যাওক',
     'common.mins':    'মিনিট',
+
+    // ── Aliases (HTML uses these key names)
+'shift.offline':     '🔴 অফলাইন — দোকান গ্ৰাহকৰ পৰা লুকুৱাই ৰখা হৈছে',
+'shift.start':       'শ্বিফ্ট আৰম্ভ কৰক — অনলাইন যাওক',
+'shift.end':         'শ্বিফ্ট শেষ কৰক',
+'shift.hint':        'আপোনাৰ দোকান আপোনাৰ অঞ্চলৰ গ্ৰাহকসকলৰ বাবে দৃশ্যমান হ’ব।',
+'shift.hoursToday':  'আজি: {open} – {close}',
+'shift.yesterday':   'যোৱাকালি',
+
+// ── Stats
+'stats.orders':      'অৰ্ডাৰ',
+'stats.earnings':    'উপাৰ্জন',
+'stats.avgTime':     'গড় প্ৰস্তুত',
+'stats.ordersToday': 'আজিৰ অৰ্ডাৰ',
+'stats.earningsToday':'আজিৰ উপাৰ্জন',
+'stats.avgReady':    'গড় প্ৰস্তুতিৰ সময়',
+
+// ── Tabs
+'tab.orders':        'অৰ্ডাৰ',
+'tab.inventory':     'কুইক OOS',
+
+// ── Orders feed
+'orders.emptyTitle': 'কোনো সক্ৰিয় অৰ্ডাৰ নাই',
+'orders.emptySub':   'নতুন অৰ্ডাৰসমূহ এটা শব্দ এলাৰ্টৰ সৈতে ইয়াত দেখা যাব।',
+'pull.refresh':      'ৰিফ্ৰেছ কৰিবলৈ টানক',
+
+// ── OOS panel
+'oos.intro':         'সামগ্ৰীসমূহ আউট অৱ ষ্টক বুলি চিহ্নিত কৰক। ই আপোনাৰ পৰৱৰ্তী কোটসমূহত স্বয়ংক্ৰিয়ভাৱে নোট হৈ যাব।',
+'oos.clearAll':      'সকলো মচি পেলাওক',
+'oos.placeholder':   'সামগ্ৰী যোগ কৰক…',
+'oos.add':           '+ যোগ কৰক',
+
+// ── Order action panel
+'panel.customerOrder':       'গ্ৰাহকৰ অৰ্ডাৰ',
+'panel.photoList':           'ফটোৰ তালিকা',
+'panel.yourResponse':        'আপোনাৰ উত্তৰ',
+'panel.billAmount':          'মুঠ বিলৰ পৰিমাণ',
+'panel.subNotes':            'গ্ৰাহকৰ বাবে টোকা (ঐচ্ছিক)',
+'panel.subNotesPlaceholder': 'উদাহৰণস্বৰূপে, টাটা নিমখ নাই — কেপ্টেইন কুক ১ কেজি যোগ কৰা হ’ল ✓\nমেগী আজি উপলব্ধ নাই।',
+'panel.quickOos':            'এই অৰ্ডাৰত কুইক OOS কৰক',
+'panel.sendQuote':           'গ্ৰাহকলৈ কোট (Quote) পঠাওক',
+'panel.markPacking':         'পেকিং হিচাপে চিহ্নিত কৰক',
+'panel.markReady':           'পিকআপৰ বাবে প্ৰস্তুত 🎉',
+'panel.cancelOrder':         'অৰ্ডাৰ বাতিল কৰক',
+
+// ── Shift end screen
+'shiftEnd.title':           'শ্বিফ্ট সম্পূৰ্ণ হ’ল!',
+'shiftEnd.sub':             'আপোনাৰ দোকান এতিয়া অফলাইন আছে। কাইলৈ লগ পাম।',
+'shiftEnd.exportWA':        'WhatsApp-লৈ সাৰাংশ এক্সপ’ৰ্ট কৰক',
+'shiftEnd.done':            'হৈ গ’ল — কাইলৈ লগ পাম',
+'shiftEnd.pendingWarning':  'কিছুমান অৰ্ডাৰ এতিয়াও পেন্ডিং আছে। গ্ৰাহকৰ সৈতে পোনপটীয়াকৈ যোগাযোগ কৰক।',
+
+// ── Summary card
+'summary.ordersCompleted':  'সম্পূৰ্ণ হোৱা অৰ্ডাৰ',
+'summary.earnings':         'মুঠ উপাৰ্জন',
+'summary.avgTime':          'গড় সম্পূৰ্ণ হোৱাৰ সময়',
+'summary.shiftDuration':    'শ্বিফ্টৰ সময়কাল',
+
+// In as:
+'register.badge': 'গুৱাহাটীৰ দোকানদাৰসকলৰ বাবে',
   }
 };
 
@@ -424,12 +661,9 @@ const i18n = (() => {
   function t(key, vars = {}) {
     const strings = STRINGS[currentLang] || STRINGS['en'];
     let str = strings[key] || STRINGS['en'][key] || key;
-
-    // Replace {placeholders} with provided values
     Object.entries(vars).forEach(([k, v]) => {
       str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), v);
     });
-
     return str;
   }
 
@@ -456,36 +690,46 @@ const i18n = (() => {
 
   /**
    * Render all [data-i18n] elements in the DOM.
-   * Also updates [data-i18n-placeholder] and [data-i18n-aria-label].
+   * Also updates [data-i18n-placeholder], [data-i18n-aria], and select options.
    */
   function render() {
-    // Text content
+    // 1. Text content
     document.querySelectorAll('[data-i18n]').forEach(el => {
       const key = el.getAttribute('data-i18n');
       el.textContent = t(key);
     });
 
-    // Placeholder attributes
+    // 2. Placeholder attributes
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
       const key = el.getAttribute('data-i18n-placeholder');
       el.placeholder = t(key);
     });
 
-    // Aria-label attributes
+    // 3. Aria-label attributes
     document.querySelectorAll('[data-i18n-aria]').forEach(el => {
       const key = el.getAttribute('data-i18n-aria');
       el.setAttribute('aria-label', t(key));
     });
 
-    // Update active state on language toggle buttons
+    // 4. Select <option> elements
+    document.querySelectorAll('select[data-i18n-select]').forEach(select => {
+      const currentValue = select.value;
+      select.querySelectorAll('option[data-i18n]').forEach(option => {
+        const key = option.getAttribute('data-i18n');
+        option.textContent = t(key);
+      });
+      select.value = currentValue;
+    });
+
+    // 5. Language toggle button active states
     document.querySelectorAll('.lang-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.lang === currentLang);
     });
   }
 
   /**
-   * Format currency in Indian Rupees using Intl.NumberFormat
-   * e.g., formatCurrency(347) → "₹347.00"
+   * Format currency in Indian Rupees
+   * e.g., formatCurrency(347) → "₹347"
    */
   function formatCurrency(amount) {
     return new Intl.NumberFormat('en-IN', {
@@ -504,9 +748,10 @@ const i18n = (() => {
     return new Intl.NumberFormat('en-IN').format(n);
   }
 
-  // Auto-render on init (DOMContentLoaded safe)
+  // Auto-render on init
   document.addEventListener('DOMContentLoaded', render);
 
   return { t, setLang, getLang, render, formatCurrency, formatNumber };
-  window.i18n = i18n;
 })();
+
+window.i18n = i18n; // ✅ Exposes i18n globally

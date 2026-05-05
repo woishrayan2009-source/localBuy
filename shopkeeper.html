@@ -234,16 +234,16 @@
       <!-- Category -->
       <div class="field-group">
         <label for="input-category" class="field-label" data-i18n="register.category">Shop category</label>
-        <select id="input-category" class="field-input field-select" required>
-          <option value="" disabled selected data-i18n="form.selectCategory">Select a category</option>
-          <option value="kirana"     data-i18n="cat.kirana">🛒 Kirana / General Store</option>
-          <option value="chemist"    data-i18n="cat.chemist">💊 Chemist / Medical</option>
-          <option value="stationery" data-i18n="cat.stationery">✏️ Stationery</option>
-          <option value="bakery"     data-i18n="cat.bakery">🎂 Bakery</option>
-          <option value="dairy"      data-i18n="cat.dairy">🥛 Dairy</option>
-          <option value="beauty"     data-i18n="cat.beauty">💄 Beauty</option>
-          <option value="fish"       data-i18n="cat.fish">🐟 Fish &amp; Meat</option>
-        </select>
+        <select id="input-category" class="field-input field-select" required data-i18n-select>
+  <option value="" disabled selected data-i18n="form.selectCategory">Select a category</option>
+  <option value="kirana"     data-i18n="cat.kirana">🛒 Kirana / General Store</option>
+  <option value="chemist"    data-i18n="cat.chemist">💊 Chemist / Medical</option>
+  <option value="stationery" data-i18n="cat.stationery">✏️ Stationery</option>
+  <option value="bakery"     data-i18n="cat.bakery">🎂 Bakery</option>
+  <option value="dairy"      data-i18n="cat.dairy">🥛 Dairy</option>
+  <option value="beauty"     data-i18n="cat.beauty">💄 Beauty</option>
+  <option value="fish"       data-i18n="cat.fish">🐟 Fish &amp; Meat</option>
+</select>
       </div>
 
       <!-- Area / neighbourhood -->
@@ -377,7 +377,7 @@
       <!-- Status pill: offline (before shift) -->
       <div class="status-pill-lg offline" id="shift-status-pill" aria-live="polite">
         <span class="status-dot-lg" aria-hidden="true"></span>
-        <span data-i18n="shift.offline">🔴 Offline — Shop is hidden from customers</span>
+        <span data-i18n="shift.statusOffline">🔴 Offline — Shop is hidden from customers</span>
       </div>
 
       <!-- Stats from yesterday (if available) -->
