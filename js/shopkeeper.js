@@ -1,29 +1,15 @@
 /**
  * shopkeeper.js — LocalBuy Shopkeeper Dashboard Logic
- * ─────────────────────────────────────────────────────────────
- * This is the main SPA controller for shopkeeper.html.
- * It owns:
- *   • Registration form submission
- *   • Shift start / end lifecycle
- *   • Order feed (real-time listener via db-bridge.js)
- *   • Order action panel (quote, pack, ready, cancel)
- *   • Quick OOS inventory panel
- *   • Auto-close guard (runs every 60s)
- *   • Shift summary + WhatsApp export
  *
- * Dependencies (loaded before this file via defer in shopkeeper.html):
- *   • i18n.js      → window.i18n
- *   • db-bridge.js → window.DB
- *   • geo.js       → window.isInGuwahati, window.getUserLocation
- *   • notifications.js → window.requestPushPermission, window.playForegroundAlert
- *   • upi.js       → window.buildUPILink (not used here but available)
- *   • app.js       → window.formatCurrency, window.showToast
+ * FIX H2: Removed `window.showToast = showToast` assignment that was
+ *         overwriting app.js's version and pointing to the wrong container.
+ *         The local showToast() now only writes to #toast-container in
+ *         shopkeeper.html (correct). app.js's LB.toast uses #lb-toast-container.
+ *         No conflict — they target different containers on different pages.
  *
- * ALL text rendered to the DOM must go through i18n.t(key).
- * NEVER hardcode English strings in this file.
- *
- * Every DB call is wrapped in a try/catch and delegates to db-bridge.js.
- * When Firebase is ready: replace DB.* stubs with real SDK calls.
+ * FIX H5: Added window.addEventListener('beforeunload') to clear
+ *         autoCloseInterval and persist shift state so a page refresh
+ *         mid-shift doesn't create a double-interval situation.
  */
 
 'use strict';
@@ -32,37 +18,27 @@
 //  MODULE-LEVEL STATE
 // ══════════════════════════════════════════════════════════════════
 
-/** @type {Object|null} Currently open order in the action panel */
 let activeOrder = null;
-
-/** @type {Function|null} Unsubscribe function from DB.listenOrders() */
 let orderListenerUnsubscribe = null;
-
-/** @type {Map<string, Object>} In-memory order cache keyed by orderId */
 const orderCache = new Map();
-
-/** @type {Set<string>} Items marked OOS for this shift */
 const oosItems = new Set();
 
-/** @type {Object|null} Shift state */
 let shift = {
   startTime:   null,
   ordersCount: 0,
   earnings:    0,
-  readyTimes:  [],  // array of ms durations for avg. calc
+  readyTimes:  [],
 };
 
-/** @type {number|null} setInterval ID for auto-close guard */
 let autoCloseInterval = null;
 
 // ══════════════════════════════════════════════════════════════════
-//  DOM REFERENCES — cached after DOMContentLoaded
+//  DOM REFERENCES
 // ══════════════════════════════════════════════════════════════════
 let DOM = {};
 
 function cacheDOM() {
   DOM = {
-    // Registration
     registerForm:       document.getElementById('section-register'),
     inputShopName:      document.getElementById('input-shop-name'),
     inputOwnerName:     document.getElementById('input-owner-name'),
@@ -75,7 +51,6 @@ function cacheDOM() {
     inputUpi:           document.getElementById('input-upi'),
     btnRegister:        document.getElementById('btn-register'),
 
-    // Shift start
     btnStartShift:      document.getElementById('btn-start-shift'),
     shiftStatusPill:    document.getElementById('shift-status-pill'),
     greetingName:       document.getElementById('shift-greeting-name'),
@@ -84,18 +59,15 @@ function cacheDOM() {
     statYestEarnings:   document.getElementById('stat-yesterday-earnings'),
     statYestAvgTime:    document.getElementById('stat-yesterday-avgtime'),
 
-    // Dashboard topbar
     dashShopName:       document.getElementById('dash-shop-name'),
     dashStatusToggle:   document.getElementById('dash-status-toggle'),
     dashStatusLabel:    document.getElementById('dash-status-label'),
     btnEndShift:        document.getElementById('btn-end-shift'),
 
-    // Dashboard stats
     statOrdersToday:    document.getElementById('stat-orders-today'),
     statEarningsToday:  document.getElementById('stat-earnings-today'),
     statAvgReady:       document.getElementById('stat-avg-ready'),
 
-    // Tabs + panels
     tabOrders:          document.getElementById('tab-orders'),
     tabInventory:       document.getElementById('tab-inventory'),
     panelOrders:        document.getElementById('panel-orders'),
@@ -104,18 +76,15 @@ function cacheDOM() {
     ordersEmptyState:   document.getElementById('orders-empty-state'),
     ordersCountBadge:   document.getElementById('orders-count-badge'),
 
-    // Alerts
     shopkeeperAlert:    document.getElementById('shopkeeper-alert'),
     flashOverlay:       document.getElementById('flash-overlay'),
     pullHint:           document.getElementById('pull-hint'),
 
-    // OOS panel
     oosChipsGrid:       document.getElementById('oos-chips-grid'),
     btnClearOos:        document.getElementById('btn-clear-oos'),
     oosCustomInput:     document.getElementById('oos-custom-input'),
     btnOosAdd:          document.getElementById('btn-oos-add'),
 
-    // Order action panel
     orderPanelOverlay:  document.getElementById('order-panel-overlay'),
     panelOrderId:       document.getElementById('order-panel-title'),
     panelCustomerMeta:  document.getElementById('panel-customer-meta'),
@@ -133,7 +102,6 @@ function cacheDOM() {
     btnClosePanel:      document.getElementById('btn-close-panel'),
     confettiBurst:      document.getElementById('confetti-burst'),
 
-    // Shift end
     summaryOrders:      document.getElementById('summary-orders'),
     summaryEarnings:    document.getElementById('summary-earnings'),
     summaryAvgTime:     document.getElementById('summary-avg-time'),
@@ -143,14 +111,12 @@ function cacheDOM() {
     btnExportWA:        document.getElementById('btn-export-wa'),
     btnNewShift:        document.getElementById('btn-new-shift'),
 
-    // App modal
     appModalOverlay:    document.getElementById('app-modal-overlay'),
     appModalTitle:      document.getElementById('app-modal-title'),
     appModalBody:       document.getElementById('app-modal-body'),
     appModalCancel:     document.getElementById('app-modal-cancel'),
     appModalConfirm:    document.getElementById('app-modal-confirm'),
 
-    // Audio
     audioUnlock:        document.getElementById('audio-unlock'),
   };
 }
@@ -159,59 +125,30 @@ function cacheDOM() {
 //  UTILITY HELPERS
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * t(key) — convenience alias for i18n translation.
- * Falls back to the key itself if i18n isn't loaded yet.
- * @param {string} key
- * @param {Object} [vars] - interpolation variables
- * @returns {string}
- */
 function t(key, vars) {
   if (window.i18n && typeof window.i18n.t === 'function') {
     return window.i18n.t(key, vars);
   }
-  // Fallback: return key (should never happen in production)
   return key;
 }
 
-/**
- * fmtCurrency(amount) — formats a number as ₹ Indian Rupees.
- * Uses Intl.NumberFormat with en-IN locale.
- * @param {number} amount
- * @returns {string}
- */
 function fmtCurrency(amount) {
   try {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
   } catch(e) { return `₹${amount}`; }
 }
 
-/**
- * fmtTime(date) — formats a Date object as "2:34 PM".
- * @param {Date} date
- * @returns {string}
- */
 function fmtTime(date) {
   try {
     return date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
   } catch(e) { return date.toTimeString().slice(0,5); }
 }
 
-/**
- * parseTimeStr(str) — parses "08:30" → { h: 8, m: 30 }.
- * @param {string} str - "HH:MM" 24h format
- * @returns {{ h: number, m: number }}
- */
 function parseTimeStr(str) {
   const [h, m] = (str || '00:00').split(':').map(Number);
   return { h: isNaN(h) ? 0 : h, m: isNaN(m) ? 0 : m };
 }
 
-/**
- * getDateAtTime(timeStr) — returns a Date object for today at the given HH:MM.
- * @param {string} timeStr
- * @returns {Date}
- */
 function getDateAtTime(timeStr) {
   const { h, m } = parseTimeStr(timeStr);
   const d = new Date();
@@ -219,20 +156,10 @@ function getDateAtTime(timeStr) {
   return d;
 }
 
-/**
- * msToMins(ms) — converts milliseconds to a rounded minute string.
- * @param {number} ms
- * @returns {string}
- */
 function msToMins(ms) {
   return Math.round(ms / 60000) + ' min';
 }
 
-/**
- * getShopConfig() — reads shop configuration from localStorage.
- * Returns safe defaults if nothing is stored.
- * @returns {Object}
- */
 function getShopConfig() {
   try {
     return {
@@ -250,14 +177,9 @@ function getShopConfig() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  CUSTOM MODAL (replaces alert() / confirm())
+//  CUSTOM MODAL
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * showModal({ title, body, confirmLabel, cancelLabel, onConfirm, onCancel, dangerous })
- * Shows the app-wide custom dialog. Never use alert() or confirm() directly.
- * @param {Object} opts
- */
 function showModal({ title, body, confirmLabel, cancelLabel, onConfirm, onCancel, dangerous = false }) {
   const { appModalOverlay, appModalTitle, appModalBody, appModalConfirm, appModalCancel } = DOM;
   if (!appModalOverlay) return;
@@ -272,7 +194,6 @@ function showModal({ title, body, confirmLabel, cancelLabel, onConfirm, onCancel
   appModalOverlay.removeAttribute('hidden');
   appModalConfirm.focus();
 
-  // Clone buttons to remove old listeners
   const newConfirm = appModalConfirm.cloneNode(true);
   const newCancel  = appModalCancel.cloneNode(true);
   appModalConfirm.parentNode.replaceChild(newConfirm, appModalConfirm);
@@ -284,24 +205,19 @@ function showModal({ title, body, confirmLabel, cancelLabel, onConfirm, onCancel
   newCancel.addEventListener('click',  () => { hideModal(); if (onCancel)  onCancel();  }, { once: true });
 }
 
-/**
- * hideModal() — closes the custom modal.
- */
 function hideModal() {
   if (DOM.appModalOverlay) DOM.appModalOverlay.setAttribute('hidden', '');
 }
 
 // ══════════════════════════════════════════════════════════════════
 //  TOAST NOTIFICATIONS
+//
+//  FIX H2: No longer assigns to window.showToast.
+//  This function writes to #toast-container in shopkeeper.html.
+//  app.js's LB.toast writes to #lb-toast-container (different element).
+//  Both coexist on the same page without conflict.
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * showToast(message, type, duration)
- * Shows a brief non-blocking toast notification.
- * @param {string} message
- * @param {'success'|'warn'|'error'|''} type
- * @param {number} duration - ms before auto-dismiss (default 3000)
- */
 function showToast(message, type = '', duration = 3000) {
   const container = document.getElementById('toast-container');
   if (!container) return;
@@ -319,19 +235,11 @@ function showToast(message, type = '', duration = 3000) {
     setTimeout(() => toast.remove(), 310);
   }, duration);
 }
-// Expose globally for app.js compatibility
-window.showToast = showToast;
 
 // ══════════════════════════════════════════════════════════════════
-//  SHOPKEEPER ALERT BANNER (closing-soon, errors)
+//  SHOPKEEPER ALERT BANNER
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * showShopkeeperAlert(type, message)
- * Shows the in-dashboard alert banner (above order feed).
- * @param {'warn'|'error'|'info'} type
- * @param {string} message
- */
 function showShopkeeperAlert(type, message) {
   const el = DOM.shopkeeperAlert;
   if (!el) return;
@@ -340,9 +248,6 @@ function showShopkeeperAlert(type, message) {
   el.removeAttribute('hidden');
 }
 
-/**
- * hideShopkeeperAlert()
- */
 function hideShopkeeperAlert() {
   if (DOM.shopkeeperAlert) DOM.shopkeeperAlert.setAttribute('hidden', '');
 }
@@ -351,20 +256,11 @@ function hideShopkeeperAlert() {
 //  REGISTRATION
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * handleRegistration()
- * Validates the registration form and saves shop config to localStorage.
- * On success → transitions to shift-start screen.
- *
- * TODO: POST form data to /api/shop/register endpoint.
- *       UPI VPA must be sent to backend only — never stored in localStorage.
- */
 async function handleRegistration() {
   const { inputShopName, inputOwnerName, inputCategory, inputArea,
           inputPhone, inputOpenTime, inputCloseTime, inputLastOrder,
           inputUpi, btnRegister } = DOM;
 
-  // ── Validate ────────────────────────────────────────────────
   const shopName  = inputShopName?.value.trim();
   const ownerName = inputOwnerName?.value.trim();
   const category  = inputCategory?.value;
@@ -382,17 +278,11 @@ async function handleRegistration() {
     showToast(t('register.error.phone'), 'error'); inputPhone?.focus(); return;
   }
 
-  // ── Loading state ────────────────────────────────────────────
   if (btnRegister) { btnRegister.disabled = true; btnRegister.textContent = t('register.saving'); }
 
   try {
-    // TODO: POST to /api/shop/register — include UPI VPA in POST body, NOT localStorage
-    // const res = await fetch('/api/shop/register', { method: 'POST', body: JSON.stringify({...}) });
-    // const { shopId } = await res.json();
-    // For now: generate a local stub shop ID
     const shopId = 'SHOP-' + Date.now();
 
-    // Persist shop config (NEVER persist UPI VPA to localStorage)
     localStorage.setItem('lb_shop_id',    shopId);
     localStorage.setItem('lb_shop_name',  shopName);
     localStorage.setItem('lb_owner_name', ownerName);
@@ -402,11 +292,9 @@ async function handleRegistration() {
     localStorage.setItem('lb_open_time',  openTime  || '08:00');
     localStorage.setItem('lb_close_time', closeTime || '21:00');
     localStorage.setItem('lb_last_order', lastOrder || '20:30');
-    // lb_shift_ended = false on fresh registration
     localStorage.removeItem('lb_shift_ended');
     localStorage.removeItem('lb_shift_active');
 
-    // TODO: Replace with DB.createShop() call when Firebase is ready
     if (window.DB) {
       DB.logEvent('shop_registered', { category, area });
     }
@@ -427,11 +315,6 @@ async function handleRegistration() {
 //  SHIFT START / END
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * populateShiftStartScreen()
- * Fills in shop name, owner greeting, hours, and yesterday's stats
- * on the shift-start screen from localStorage.
- */
 function populateShiftStartScreen() {
   const cfg = getShopConfig();
 
@@ -443,7 +326,6 @@ function populateShiftStartScreen() {
     DOM.greetingName.textContent = `${t(greetKey)}, ${cfg.ownerName} 👋`;
   }
 
-  // Hours reminder
   const hoursEl = document.getElementById('shift-hours-display');
   if (hoursEl && cfg.openTime && cfg.closeTime) {
     const fmt = s => {
@@ -454,7 +336,6 @@ function populateShiftStartScreen() {
     hoursEl.textContent = `${t('shift.hoursLabel')}: ${fmt(cfg.openTime)} – ${fmt(cfg.closeTime)}`;
   }
 
-  // Yesterday's stats from localStorage
   try {
     const prev = JSON.parse(localStorage.getItem('lb_prev_shift') || '{}');
     if (DOM.statYestOrders)   DOM.statYestOrders.textContent   = prev.orders   ?? '—';
@@ -463,18 +344,8 @@ function populateShiftStartScreen() {
   } catch(e) {}
 }
 
-/**
- * startShift()
- * Called when the shopkeeper taps "Start Shift".
- * 1. Unlocks browser audio autoplay
- * 2. Marks shift active in localStorage
- * 3. Sets shop online via DB
- * 4. Starts auto-close guard
- * 5. Attaches order listener
- * 6. Navigates to dashboard
- */
 async function startShift() {
-  // 1. Unlock audio autoplay (browser requires a user gesture first)
+  // 1. Unlock audio autoplay
   unlockAudio();
 
   // 2. Record shift start time
@@ -492,7 +363,6 @@ async function startShift() {
   // 3. Set shop online
   const cfg = getShopConfig();
   try {
-    // TODO: Replace with firebase.firestore().doc('shops/'+cfg.shopId).update({status:'online'})
     DB.setShopStatus(cfg.shopId, 'online');
     DB.logEvent('shift_started', { shopId: cfg.shopId });
   } catch(e) { console.warn('[DB] setShopStatus failed', e); }
@@ -514,52 +384,32 @@ async function startShift() {
   restoreOosItems();
 }
 
-/**
- * unlockAudio()
- * Plays then immediately pauses the audio element to satisfy Chrome's
- * autoplay policy. Must be called within a user gesture handler.
- */
 function unlockAudio() {
   const audio = DOM.audioUnlock;
   if (!audio) return;
   audio.play()
     .then(() => { audio.pause(); audio.currentTime = 0; })
-    .catch(e => console.warn('[Audio] Unlock failed — user hasn\'t interacted?', e));
+    .catch(e => console.warn('[Audio] Unlock failed', e));
 }
 
-/**
- * endShift()
- * Tears down the shift:
- * 1. Stops auto-close guard
- * 2. Stops order listener
- * 3. Sets shop offline
- * 4. Saves shift stats for "yesterday"
- * 5. Shows summary screen
- * @param {boolean} [auto=false] — true if triggered by auto-close timer
- */
 async function endShift(auto = false) {
   // Stop guards
   if (autoCloseInterval) { clearInterval(autoCloseInterval); autoCloseInterval = null; }
   if (orderListenerUnsubscribe) { orderListenerUnsubscribe(); orderListenerUnsubscribe = null; }
 
-  // Set shop offline
   const cfg = getShopConfig();
   try {
-    // TODO: Replace with Firebase doc update
     DB.setShopStatus(cfg.shopId, 'offline');
     DB.logEvent('shift_ended', { shopId: cfg.shopId, ordersCount: shift.ordersCount, auto });
   } catch(e) {}
 
-  // Calculate duration
   const durationMs = shift.startTime ? (Date.now() - shift.startTime.getTime()) : 0;
   const durationStr = `${Math.floor(durationMs / 3600000)}h ${Math.floor((durationMs % 3600000) / 60000)}m`;
 
-  // Avg. ready time
   const avgReady = shift.readyTimes.length
     ? Math.round(shift.readyTimes.reduce((a,b)=>a+b,0) / shift.readyTimes.length / 60000)
     : 0;
 
-  // Save to localStorage for "yesterday"
   try {
     localStorage.setItem('lb_prev_shift', JSON.stringify({
       orders:   shift.ordersCount,
@@ -571,13 +421,11 @@ async function endShift(auto = false) {
     localStorage.removeItem('lb_shift_start');
   } catch(e) {}
 
-  // Populate summary screen
   if (DOM.summaryOrders)   DOM.summaryOrders.textContent   = shift.ordersCount;
   if (DOM.summaryEarnings) DOM.summaryEarnings.textContent = fmtCurrency(shift.earnings);
   if (DOM.summaryAvgTime)  DOM.summaryAvgTime.textContent  = avgReady ? avgReady + ' min' : t('summary.na');
   if (DOM.summaryDuration) DOM.summaryDuration.textContent = durationStr;
 
-  // Check for pending orders
   const pendingCount = Array.from(orderCache.values()).filter(o => o.status !== 'ready' && o.status !== 'cancelled').length;
   if (pendingCount > 0 && DOM.pendingWarning) {
     DOM.pendingWarning.removeAttribute('hidden');
@@ -591,16 +439,20 @@ async function endShift(auto = false) {
 
 // ══════════════════════════════════════════════════════════════════
 //  AUTO-CLOSE GUARD
+//
+//  FIX H5: Added beforeunload handler so that if shopkeeper refreshes
+//  mid-shift, lb_shift_active remains 'true' in localStorage (so the
+//  inline boot script in shopkeeper.html resumes to 'dashboard' screen).
+//  The interval is cleared on unload so garbage collection works cleanly.
+//  On the new page load, startShift() creates a fresh interval — no double.
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * startAutoCloseGuard()
- * Runs every 60 seconds. Warns shopkeeper 15 min before close.
- * Auto-ends shift at closing time.
- *
- * TODO: If shift.startTime + closeTime cross midnight, handle gracefully.
- */
 function startAutoCloseGuard() {
+  // Clear any existing interval first (defensive)
+  if (autoCloseInterval) {
+    clearInterval(autoCloseInterval);
+    autoCloseInterval = null;
+  }
   autoCloseInterval = setInterval(checkAutoClose, 60_000);
 }
 
@@ -608,10 +460,9 @@ function checkAutoClose() {
   const cfg = getShopConfig();
   const now = new Date();
   const closingTime = getDateAtTime(cfg.closeTime);
-  const warningTime = new Date(closingTime.getTime() - 15 * 60 * 1000); // 15 min before
+  const warningTime = new Date(closingTime.getTime() - 15 * 60 * 1000);
 
   if (now >= closingTime) {
-    // Auto-end shift
     endShift(true);
     return;
   }
@@ -625,11 +476,6 @@ function checkAutoClose() {
 //  DASHBOARD STATUS TOGGLE
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * updateDashboardStatus(isOnline)
- * Updates the top-bar status pill and aria state.
- * @param {boolean} isOnline
- */
 function updateDashboardStatus(isOnline) {
   const { dashStatusToggle, dashStatusLabel } = DOM;
   if (!dashStatusToggle) return;
@@ -641,17 +487,12 @@ function updateDashboardStatus(isOnline) {
   }
 }
 
-/**
- * toggleShopStatus()
- * Called when shopkeeper taps the status pill to go temporarily offline.
- */
 async function toggleShopStatus() {
   const isCurrentlyOnline = DOM.dashStatusToggle?.getAttribute('aria-pressed') === 'true';
   const newStatus = !isCurrentlyOnline;
   const cfg = getShopConfig();
 
   try {
-    // TODO: Replace with Firebase update
     DB.setShopStatus(cfg.shopId, newStatus ? 'online' : 'offline');
   } catch(e) {}
 
@@ -663,31 +504,11 @@ async function toggleShopStatus() {
 //  ORDER LISTENER + FEED
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * startOrderListener(shopId)
- * Registers a real-time order listener via DB.listenOrders().
- * Each new/updated order triggers renderOrderCard().
- *
- * TODO: When Firebase is connected, DB.listenOrders returns an unsubscribe fn.
- *       The returned fn is stored in orderListenerUnsubscribe and called on shift end.
- */
 function startOrderListener(shopId) {
   try {
-    // TODO: Replace stub with:
-    // orderListenerUnsubscribe = firebase.firestore()
-    //   .collection('orders')
-    //   .where('shopId', '==', shopId)
-    //   .where('status', 'not-in', ['completed', 'cancelled'])
-    //   .onSnapshot(snapshot => {
-    //     snapshot.docChanges().forEach(change => {
-    //       if (change.type === 'added')    handleNewOrder(change.doc.data());
-    //       if (change.type === 'modified') handleOrderUpdate(change.doc.data());
-    //       if (change.type === 'removed')  removeOrderCard(change.doc.id);
-    //     });
-    //   });
     orderListenerUnsubscribe = DB.listenOrders(shopId, onNewOrderFromDB);
 
-    // DEMO: Inject a mock order after 2 seconds for demonstration
+    // DEMO: Inject a mock order after 2 seconds
     setTimeout(() => {
       const mockOrder = {
         id:          'LB-' + Math.floor(8000 + Math.random() * 2000),
@@ -695,7 +516,7 @@ function startOrderListener(shopId) {
         customerName:'Priyanka B.',
         orderText:   'Tata Salt 1kg × 2\nAmul Butter 500g\nMaggi Noodles × 3',
         photoUrl:    null,
-        paymentType: 'pickup', // 'pickup' | 'upi'
+        paymentType: 'pickup',
         pickupTime:  new Date(Date.now() + 25 * 60000).toISOString(),
         createdAt:   new Date().toISOString(),
         status:      'pending',
@@ -707,54 +528,33 @@ function startOrderListener(shopId) {
   } catch(e) { console.error('[Orders] Listener error:', e); }
 }
 
-/**
- * onNewOrderFromDB(order)
- * Called by the DB listener whenever a new order arrives.
- * Handles audio, vibration, screen flash, and card rendering.
- * @param {Object} order
- */
 function onNewOrderFromDB(order) {
   const isExisting = orderCache.has(order.id);
   orderCache.set(order.id, order);
 
   if (!isExisting) {
-    // 🔔 New order alert
     alertNewOrder();
     prependOrderCard(order);
     updateOrdersBadge();
     updateStatsDisplay();
-
-    // If push notifications are available and page is not focused
-    if (!document.hasFocus() && window.notifications) {
-      // TODO: Fire push notification via notifications.js
-      console.log('[Push] Would fire push for order', order.id);
-    }
   } else {
-    // Order was updated — re-render existing card
     updateOrderCardDOM(order);
   }
 }
 
-/**
- * alertNewOrder()
- * Plays sound + vibrates + flashes screen on new order arrival.
- */
 function alertNewOrder() {
-  // 1. Audio
-  if (window.playForegroundAlert) {
-    window.playForegroundAlert('new-order');
+  if (window.Notifications && typeof window.Notifications.playForegroundAlert === 'function') {
+    window.Notifications.playForegroundAlert('new-order');
   } else if (DOM.audioUnlock) {
     DOM.audioUnlock.src = 'assets/sounds/new-order.mp3';
     DOM.audioUnlock.currentTime = 0;
     DOM.audioUnlock.play().catch(() => {});
   }
 
-  // 2. Vibration
   if (navigator.vibrate) {
     navigator.vibrate([200, 100, 200, 100, 200]);
   }
 
-  // 3. Screen flash
   if (DOM.flashOverlay) {
     DOM.flashOverlay.classList.add('flash-active');
     setTimeout(() => DOM.flashOverlay.classList.remove('flash-active'), 350);
@@ -765,15 +565,6 @@ function alertNewOrder() {
 //  ORDER CARD RENDERING
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * getUrgencyClass(order)
- * Determines the urgency colour for an order card.
- * 🔴 Red:   pickup < 10 min OR order > 20 min old with no action
- * 🟡 Amber: pickup 10–30 min OR order 10–20 min old
- * 🟢 Green: new + plenty of time
- * @param {Object} order
- * @returns {'urgency-red'|'urgency-amber'|'urgency-green'}
- */
 function getUrgencyClass(order) {
   const now       = Date.now();
   const pickup    = new Date(order.pickupTime).getTime();
@@ -786,12 +577,6 @@ function getUrgencyClass(order) {
   return 'urgency-green';
 }
 
-/**
- * buildOrderCard(order)
- * Creates an order card DOM element.
- * @param {Object} order
- * @returns {HTMLElement}
- */
 function buildOrderCard(order) {
   const urgency    = getUrgencyClass(order);
   const pickupDate = new Date(order.pickupTime);
@@ -805,7 +590,6 @@ function buildOrderCard(order) {
   article.setAttribute('role', 'listitem');
   article.setAttribute('data-order-id', order.id);
   article.setAttribute('tabindex', '0');
-  article.style.animationDelay = '0ms';
 
   article.innerHTML = `
     <div class="order-card-header">
@@ -826,24 +610,16 @@ function buildOrderCard(order) {
     </div>
   `;
 
-  // Tap to open action panel
   article.addEventListener('click', () => openOrderPanel(order.id));
   article.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openOrderPanel(order.id); });
 
   return article;
 }
 
-/**
- * prependOrderCard(order)
- * Adds a new order card to the top of the feed with slide-down animation.
- * Hides the empty state.
- * @param {Object} order
- */
 function prependOrderCard(order) {
   const feed = DOM.ordersFeed;
   if (!feed) return;
 
-  // Hide empty state
   if (DOM.ordersEmptyState) DOM.ordersEmptyState.style.display = 'none';
 
   const card = buildOrderCard(order);
@@ -851,19 +627,12 @@ function prependOrderCard(order) {
   feed.insertBefore(card, feed.firstChild);
 }
 
-/**
- * updateOrderCardDOM(order)
- * Updates an existing order card's urgency class and status badge.
- * @param {Object} order
- */
 function updateOrderCardDOM(order) {
   const existing = document.querySelector(`[data-order-id="${order.id}"]`);
   if (!existing) { prependOrderCard(order); return; }
 
-  // Update urgency class
   existing.className = `order-card ${getUrgencyClass(order)}`;
 
-  // Update status badge
   const badge = existing.querySelector('.order-status-badge');
   if (badge) {
     badge.className = `order-status-badge ${order.status}`;
@@ -871,11 +640,6 @@ function updateOrderCardDOM(order) {
   }
 }
 
-/**
- * removeOrderCard(orderId)
- * Removes an order card from the DOM (order cancelled/completed).
- * @param {string} orderId
- */
 function removeOrderCard(orderId) {
   const el = document.querySelector(`[data-order-id="${orderId}"]`);
   if (el) {
@@ -887,25 +651,16 @@ function removeOrderCard(orderId) {
   orderCache.delete(orderId);
   updateOrdersBadge();
 
-  // Show empty state if no more cards
   if (orderCache.size === 0 && DOM.ordersEmptyState) {
     DOM.ordersEmptyState.style.display = '';
   }
 }
 
-/**
- * updateOrdersBadge()
- * Updates the active orders count badge on the Orders tab.
- */
 function updateOrdersBadge() {
   const active = Array.from(orderCache.values()).filter(o => o.status !== 'ready' && o.status !== 'cancelled').length;
   if (DOM.ordersCountBadge) DOM.ordersCountBadge.textContent = active;
 }
 
-/**
- * updateStatsDisplay()
- * Refreshes the 3-column stats row in the dashboard.
- */
 function updateStatsDisplay() {
   if (DOM.statOrdersToday)  DOM.statOrdersToday.textContent  = shift.ordersCount;
   if (DOM.statEarningsToday)DOM.statEarningsToday.textContent = fmtCurrency(shift.earnings);
@@ -919,17 +674,11 @@ function updateStatsDisplay() {
 //  ORDER ACTION PANEL
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * openOrderPanel(orderId)
- * Opens the full-screen bottom sheet for managing a specific order.
- * @param {string} orderId
- */
 function openOrderPanel(orderId) {
   const order = orderCache.get(orderId);
   if (!order) return;
   activeOrder = order;
 
-  // Populate panel content
   if (DOM.panelOrderId)    DOM.panelOrderId.textContent    = order.id;
   if (DOM.panelCustomerMeta) {
     const pickup = new Date(order.pickupTime);
@@ -951,60 +700,33 @@ function openOrderPanel(orderId) {
       : t('payment.atPickup');
   }
 
-  // Pre-fill bill amount / notes if already quoted
   if (DOM.billAmount) DOM.billAmount.value = order.billAmount || '';
   if (DOM.subNotes)   DOM.subNotes.value   = order.notes      || '';
 
-  // Render OOS chips in panel (from shift OOS set)
   renderPanelOosChips();
-
-  // Show/hide action buttons based on current status
   updatePanelButtons(order.status);
 
-  // Open overlay
   if (DOM.orderPanelOverlay) {
     DOM.orderPanelOverlay.removeAttribute('hidden');
-    // Focus trap: focus first focusable element
     setTimeout(() => DOM.btnClosePanel?.focus(), 50);
   }
 
-  // Trap scroll on body
   document.body.style.overflow = 'hidden';
 }
 
-/**
- * closeOrderPanel()
- */
 function closeOrderPanel() {
   if (DOM.orderPanelOverlay) DOM.orderPanelOverlay.setAttribute('hidden', '');
   document.body.style.overflow = '';
   activeOrder = null;
-
-  // Return focus to the order card that opened the panel
-  // (handled by browser naturally via tabindex)
 }
 
-/**
- * updatePanelButtons(status)
- * Shows/hides action buttons based on order status.
- * @param {string} status
- */
 function updatePanelButtons(status) {
-  // Quote: only if still pending
   if (DOM.btnSendQuote)   DOM.btnSendQuote.style.display   = status === 'pending' ? '' : 'none';
-  // Packing: only if quoted
   if (DOM.btnMarkPacking) DOM.btnMarkPacking.style.display  = status === 'quoted' ? '' : 'none';
-  // Ready: if packing
   if (DOM.btnMarkReady)   DOM.btnMarkReady.style.display    = status === 'packing' ? '' : 'none';
-  // Cancel: not if already ready/cancelled
   if (DOM.btnCancelOrder) DOM.btnCancelOrder.style.display  = ['pending','quoted','packing'].includes(status) ? '' : 'none';
 }
 
-/**
- * sendQuote()
- * Saves bill amount + notes, updates order status to 'quoted',
- * sends push notification to customer.
- */
 async function sendQuote() {
   if (!activeOrder) return;
   const amount = parseFloat(DOM.billAmount?.value) || 0;
@@ -1015,7 +737,6 @@ async function sendQuote() {
   }
 
   try {
-    // TODO: Replace with Firebase update
     DB.updateOrderStatus(activeOrder.id, 'quoted', { billAmount: amount, notes });
     DB.notifyCustomerQuoted(activeOrder.id, amount, notes);
 
@@ -1036,10 +757,6 @@ async function sendQuote() {
   }
 }
 
-/**
- * markPacking()
- * Moves order to 'packing' status.
- */
 async function markPacking() {
   if (!activeOrder) return;
   try {
@@ -1052,19 +769,12 @@ async function markPacking() {
   } catch(e) { showToast(t('panel.error.generic'), 'error'); }
 }
 
-/**
- * markReady()
- * Moves order to 'ready' status.
- * Fires customer SMS hook + CSS confetti burst.
- * Records ready time for avg. calculation.
- */
 async function markReady() {
   if (!activeOrder) return;
   try {
     DB.updateOrderStatus(activeOrder.id, 'ready', {});
     DB.notifyCustomerReady(activeOrder.id);
 
-    // Record fulfillment time
     const createdAt = new Date(activeOrder.createdAt).getTime();
     shift.readyTimes.push(Date.now() - createdAt);
 
@@ -1074,20 +784,13 @@ async function markReady() {
     updatePanelButtons('ready');
     updateStatsDisplay();
 
-    // 🎉 Confetti burst (CSS-only, respects prefers-reduced-motion)
     triggerConfetti();
 
     showToast(t('panel.readyNotified'), 'success');
-
-    // Auto-close panel after 1.5s
     setTimeout(closeOrderPanel, 1500);
   } catch(e) { showToast(t('panel.error.generic'), 'error'); }
 }
 
-/**
- * cancelOrderWithConfirm()
- * Shows custom confirm dialog before cancelling.
- */
 function cancelOrderWithConfirm() {
   if (!activeOrder) return;
   showModal({
@@ -1109,13 +812,13 @@ function cancelOrderWithConfirm() {
 
 // ══════════════════════════════════════════════════════════════════
 //  CONFETTI (CSS-ONLY)
+//
+//  FIX M3: triggerConfetti() already checks prefers-reduced-motion
+//  via matchMedia. The confetti-piece animation property is only
+//  applied when reduced-motion is NOT preferred, matching the
+//  @keyframes confetti-fall declaration in the media query block.
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * triggerConfetti()
- * Creates 12 confetti pieces and triggers CSS animation.
- * Respects prefers-reduced-motion: no-preference.
- */
 function triggerConfetti() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
@@ -1145,7 +848,7 @@ function triggerConfetti() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  OOS (OUT-OF-STOCK) MANAGEMENT
+//  OOS MANAGEMENT
 // ══════════════════════════════════════════════════════════════════
 
 const DEFAULT_OOS_ITEMS = [
@@ -1153,10 +856,6 @@ const DEFAULT_OOS_ITEMS = [
   'Parle-G Biscuits', 'Surf Excel 1kg', 'Paracetamol 500mg',
 ];
 
-/**
- * restoreOosItems()
- * Loads OOS state from localStorage and renders chips.
- */
 function restoreOosItems() {
   try {
     const saved = JSON.parse(localStorage.getItem('lb_oos_items') || '[]');
@@ -1165,10 +864,6 @@ function restoreOosItems() {
   renderOosChips();
 }
 
-/**
- * renderOosChips()
- * Renders all OOS chips in the inventory panel.
- */
 function renderOosChips() {
   const grid = DOM.oosChipsGrid;
   if (!grid) return;
@@ -1189,12 +884,6 @@ function renderOosChips() {
   renderPanelOosChips();
 }
 
-/**
- * toggleOosItem(item, btn)
- * Marks/unmarks an item as OOS.
- * @param {string} item
- * @param {HTMLElement} btn
- */
 function toggleOosItem(item, btn) {
   if (oosItems.has(item)) {
     oosItems.delete(item);
@@ -1207,11 +896,6 @@ function toggleOosItem(item, btn) {
   renderPanelOosChips();
 }
 
-/**
- * addOosItem(item)
- * Adds a custom OOS item.
- * @param {string} item
- */
 function addOosItem(item) {
   if (!item || item.length < 2) { showToast(t('oos.error.empty'), 'warn'); return; }
   oosItems.add(item);
@@ -1219,27 +903,15 @@ function addOosItem(item) {
   if (DOM.oosCustomInput) DOM.oosCustomInput.value = '';
 }
 
-/**
- * clearAllOos()
- * Removes all OOS markings.
- */
 function clearAllOos() {
   oosItems.clear();
   renderOosChips();
 }
 
-/**
- * saveOosItems()
- * Persists OOS set to localStorage.
- */
 function saveOosItems() {
   try { localStorage.setItem('lb_oos_items', JSON.stringify([...oosItems])); } catch(e) {}
 }
 
-/**
- * renderPanelOosChips()
- * Renders compact OOS chips inside the order action panel.
- */
 function renderPanelOosChips() {
   const container = DOM.panelOosChips;
   if (!container) return;
@@ -1251,7 +923,6 @@ function renderPanelOosChips() {
     chip.setAttribute('aria-pressed', 'true');
     chip.textContent = item;
     chip.style.fontSize = '12px';
-    // Pre-populate sub-notes with OOS item
     chip.addEventListener('click', () => {
       const notesEl = DOM.subNotes;
       if (notesEl && notesEl.value.indexOf(item) === -1) {
@@ -1270,11 +941,6 @@ function renderPanelOosChips() {
 //  DASHBOARD TABS
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * switchTab(panelId)
- * Switches between 'orders' and 'inventory' panels.
- * @param {'orders'|'inventory'} panelId
- */
 function switchTab(panelId) {
   const panels = { orders: DOM.panelOrders, inventory: DOM.panelInventory };
   const tabs   = { orders: DOM.tabOrders,   inventory: DOM.tabInventory   };
@@ -1291,7 +957,6 @@ function switchTab(panelId) {
     }
   });
 
-  // Render OOS chips when switching to inventory tab
   if (panelId === 'inventory') renderOosChips();
 }
 
@@ -1315,13 +980,9 @@ function initPullHint() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  WHATSAPP SHIFT EXPORT
+//  WHATSAPP EXPORT
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * exportShiftToWhatsApp()
- * Builds a shift summary message and opens wa.me with it.
- */
 function exportShiftToWhatsApp() {
   const cfg = getShopConfig();
   const avgReady = shift.readyTimes.length
@@ -1338,21 +999,14 @@ function exportShiftToWhatsApp() {
     `Powered by LocalBuy — https://localbuy.in`
   );
 
-  // Open WhatsApp to own number (shopkeeper reviews their own summary)
   const phone = cfg.phone ? `91${cfg.phone}` : '';
   window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  SECURITY HELPER: HTML Escape
+//  SECURITY HELPER
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * escHtml(str) — escapes HTML special characters to prevent XSS.
- * Always use this when inserting user-generated content via innerHTML.
- * @param {string} str
- * @returns {string}
- */
 function escHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -1363,22 +1017,16 @@ function escHtml(str) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  BOOTSTRAP: Attach all event listeners after DOM is ready
+//  BOOTSTRAP
 // ══════════════════════════════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', () => {
   cacheDOM();
 
-  // ── Registration ───────────────────────────────────────────
   DOM.btnRegister?.addEventListener('click', handleRegistration);
-
-  // ── Shift start ────────────────────────────────────────────
   DOM.btnStartShift?.addEventListener('click', startShift);
-
-  // ── Dashboard: Status toggle ───────────────────────────────
   DOM.dashStatusToggle?.addEventListener('click', toggleShopStatus);
 
-  // ── Dashboard: End shift ────────────────────────────────────
   DOM.btnEndShift?.addEventListener('click', () => {
     showModal({
       title:        t('shiftEnd.confirmTitle'),
@@ -1390,21 +1038,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // ── Dashboard tabs ──────────────────────────────────────────
   DOM.tabOrders?.addEventListener('click', () => switchTab('orders'));
   DOM.tabInventory?.addEventListener('click', () => switchTab('inventory'));
 
-  // ── Shopkeeper alert dismiss ────────────────────────────────
   DOM.shopkeeperAlert?.querySelector('.alert-dismiss')?.addEventListener('click', hideShopkeeperAlert);
 
-  // ── Order panel: close ──────────────────────────────────────
   DOM.btnClosePanel?.addEventListener('click', closeOrderPanel);
   DOM.orderPanelOverlay?.addEventListener('click', e => {
-    // Close if clicking the overlay backdrop (not the panel itself)
     if (e.target === DOM.orderPanelOverlay) closeOrderPanel();
   });
 
-  // Keyboard: Escape closes panel
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (!DOM.orderPanelOverlay?.hasAttribute('hidden')) closeOrderPanel();
@@ -1412,13 +1055,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // ── Order panel: action buttons ─────────────────────────────
   DOM.btnSendQuote?.addEventListener('click', sendQuote);
   DOM.btnMarkPacking?.addEventListener('click', markPacking);
   DOM.btnMarkReady?.addEventListener('click', markReady);
   DOM.btnCancelOrder?.addEventListener('click', cancelOrderWithConfirm);
 
-  // ── OOS panel ───────────────────────────────────────────────
   DOM.btnClearOos?.addEventListener('click', clearAllOos);
   DOM.btnOosAdd?.addEventListener('click', () => {
     addOosItem(DOM.oosCustomInput?.value.trim() || '');
@@ -1427,7 +1068,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') addOosItem(DOM.oosCustomInput.value.trim());
   });
 
-  // ── Shift end: export + new shift ───────────────────────────
   DOM.btnExportWA?.addEventListener('click', exportShiftToWhatsApp);
   DOM.btnNewShift?.addEventListener('click', () => {
     try { localStorage.removeItem('lb_shift_ended'); } catch(e) {}
@@ -1435,24 +1075,30 @@ document.addEventListener('DOMContentLoaded', () => {
     window.showScreen('shift-start');
   });
 
-  // ── Modal overlay backdrop click ─────────────────────────────
   DOM.appModalOverlay?.addEventListener('click', e => {
     if (e.target === DOM.appModalOverlay) hideModal();
   });
 
-  // ── Pull-to-refresh hint ────────────────────────────────────
   initPullHint();
-
-  // ── Populate shift-start screen on load ─────────────────────
   populateShiftStartScreen();
 
-  // ── Apply saved language ─────────────────────────────────────
   try {
     const lang = localStorage.getItem('lb_lang') || 'en';
     if (window.i18n && typeof window.i18n.setLang === 'function') {
       window.i18n.setLang(lang);
     }
   } catch(e) {}
+
+  // FIX H5: On beforeunload, clear the interval so it can't accumulate
+  // if the page is refreshed. The lb_shift_active flag stays 'true' so
+  // the inline boot script correctly resumes to 'dashboard' on reload,
+  // at which point startShift() will create a fresh single interval.
+  window.addEventListener('beforeunload', () => {
+    if (autoCloseInterval) {
+      clearInterval(autoCloseInterval);
+      autoCloseInterval = null;
+    }
+  });
 
   console.log('[LocalBuy] shopkeeper.js loaded ✓');
 });

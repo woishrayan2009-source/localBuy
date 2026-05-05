@@ -16,8 +16,8 @@
   ],
   "screenshots": [],
   "shortcuts": [
-    { "name": "Browse Shops",    "url": "/customer.html",        "icons": [] },
-    { "name": "My Orders",       "url": "/customer.html#orders", "icons": [] },
-    { "name": "Shop Dashboard",  "url": "/shopkeeper.html",      "icons": [] }
+    { "name": "Browse Shops",   "url": "/customer.html",        "icons": [] },
+    { "name": "My Orders",      "url": "/customer.html#orders", "icons": [] },
+    { "name": "Shop Dashboard", "url": "/shopkeeper.html",      "icons": [] }
   ]
 }

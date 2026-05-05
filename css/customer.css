@@ -12,6 +12,7 @@
  *   6. Section: Tracker (timeline, order code)
  *   7. Shared components (confirm dialog, toasts)
  *   8. Skeleton shimmer
+ *   9. Review item styles (FIX L5)
  */
 
 /* ─── 1. APP SHELL ─────────────────────────────────────────────────── */
@@ -73,7 +74,6 @@
 /* App sections — all hidden by default, JS shows them */
 .app-section {
   padding: 0 16px 100px; /* bottom padding = floating button clearance */
-  animation: fadeUp 0.35s ease forwards;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -167,6 +167,13 @@
   box-shadow: 0 0 0 3px rgba(15, 92, 58, 0.1);
 }
 .search-input::placeholder { color: var(--color-muted); }
+
+/* FIX L3: Suppress Safari's native search cancel/decoration buttons
+   that visually clash with the custom #search-clear button. */
+.search-input::-webkit-search-cancel-button,
+.search-input::-webkit-search-decoration {
+  display: none;
+}
 
 /* Clear button inside search */
 .search-clear {
@@ -625,6 +632,57 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* ─── FIX L5: Review item styles ──────────────────────────────────────
+   These classes are used by renderReviews() in customer.js but were
+   missing from all CSS files, causing reviews to render as unstyled text.
+   Added here as the authoritative location for review styling.
+   (customer.js also injects a <style> tag as a safety net, but this
+   CSS file is the canonical source.)
+─────────────────────────────────────────────────────────────────────── */
+.review-item {
+  padding: 12px;
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+}
+.review-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.review-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-sage);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.review-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-ink);
+}
+.review-role {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.review-stars {
+  margin-left: auto;
+  color: #f59e0b;
+  font-size: 13px;
+}
+.review-text {
+  font-size: 13px;
+  color: var(--color-ink);
+  line-height: 1.5;
 }
 
 /* Trust badges */
@@ -1503,7 +1561,7 @@
 
 
 /* ─── KEYFRAMES ─────────────────────────────────────────────────────── */
-/* (Full set in animations.css — these are local overrides) */
+/* (Full set in animations.css — these are local overrides / additions) */
 
 @keyframes slideUp {
   from { transform: translateY(40px); opacity: 0; }

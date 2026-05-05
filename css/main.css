@@ -4,7 +4,6 @@
    Built for Guwahati's neighbourhood commerce
    ============================================================ */
 
-/* ── Google Fonts ─────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,600;1,9..144,700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
 
 /* ── CSS Custom Properties (Design Tokens) ────────────────── */
@@ -19,6 +18,11 @@
   --color-surface:     #f8f7f4;
   --color-ink:         #111827;
   --color-muted:       #6b7280;
+
+  /* FIX L1: --color-border was referenced ~20 times in customer.css but never defined.
+     All card borders, chip borders, textarea borders were rendering transparent.
+     Added here as the single source of truth. */
+  --color-border:      #e5e7eb;
 
   /* Traffic-light system */
   --status-open:       #16a34a;
@@ -69,20 +73,14 @@
   --transition-fast:   150ms ease;
   --transition-base:   250ms ease;
   --transition-slow:   400ms ease;
-
-  /*
-    FIX: --transition was defined in customer.html's inline <style> block
-    but never in main.css. Any component using var(--transition) would get
-    no value. Defined here so it's available everywhere.
-  */
   --transition: 0.2s ease;
 
   /* Layout */
   --max-width:   540px;
   --content-px:  1.25rem;
 
-  /* Section padding — centralised here so inline styles on sections aren't needed */
-  --section-pb: 7.5rem; /* 120px — space for bottom nav */
+  /* Section padding */
+  --section-pb: 7.5rem;
 }
 
 /* ── CSS Reset ────────────────────────────────────────────── */
@@ -267,15 +265,6 @@ h1, h2, h3, h4, h5, h6 {
   .live-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
 }
 
-/*
-  FIX: @keyframes pulse-dot was referenced by .live-dot but never defined
-  in this file, causing the animation to silently fail.
-*/
-@keyframes pulse-dot {
-  0%, 100% { transform: scale(1);   opacity: 1; }
-  50%       { transform: scale(1.4); opacity: 0.6; }
-}
-
 /* ── Shop Cards ───────────────────────────────────────────── */
 .shop-card {
   background: #fff;
@@ -331,15 +320,8 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: var(--space-2);
 }
 
-/*
-  FIX: @keyframes shimmer was referenced by .skeleton but never defined.
-  Added here.
-*/
-@keyframes shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
+/* ── Skeleton / Shimmer ───────────────────────────────────── */
+/* NOTE: @keyframes shimmer lives in animations.css */
 .skeleton {
   background: linear-gradient(90deg,
     #e5e7eb 25%,
@@ -430,13 +412,6 @@ select {
   width: 100%;
   min-height: 44px;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-  /*
-    FIX: Previously split across two lines as:
-      -webkit-appearance: none;
-        appearance: none;
-    The inconsistent indentation suggested a copy-paste error. Consolidated
-    to two correctly indented lines.
-  */
   -webkit-appearance: none;
   appearance: none;
 }
@@ -504,26 +479,17 @@ label {
 }
 
 /* ── Modal / Bottom Sheet ─────────────────────────────────── */
-/*
-  FIX: The original .modal-overlay used opacity + pointer-events for
-  show/hide, but customer.html toggled display:none/flex via inline style.
-  You cannot CSS-transition from display:none. The corrected approach:
-  - Default state: display:none (set by JS or inline style)
-  - When JS opens it: set display:flex first, then add .active on next frame
-    so the opacity/transform transition fires correctly.
-  customer.js should do:
-    overlay.style.display = 'flex';
-    requestAnimationFrame(() => overlay.classList.add('active'));
-  And to close:
-    overlay.classList.remove('active');
-    overlay.addEventListener('transitionend', () => { overlay.style.display = 'none'; }, { once: true });
-*/
+/* FIX M2: Corrected modal open/close pattern.
+   JS must:
+   1. Add .is-open (sets display:flex)
+   2. On next rAF, add .active (triggers opacity + sheet slide-up transition)
+   To close: remove .active, listen for transitionend, then remove .is-open */
 .modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.5);
   z-index: 1000;
-  display: none; /* JS controls visibility; transitioned via .active */
+  display: none;
   align-items: flex-end;
   justify-content: center;
   backdrop-filter: blur(2px);
@@ -533,15 +499,13 @@ label {
   transition: opacity var(--transition-base);
 }
 
-/* When JS sets display:flex AND adds .active, the transition fires */
+.modal-overlay.is-open {
+  display: flex;
+}
+
 .modal-overlay.active {
   opacity: 1;
   pointer-events: all;
-}
-
-/* Helper class for JS to set display before adding .active */
-.modal-overlay.is-open {
-  display: flex;
 }
 
 .modal-sheet {
@@ -558,13 +522,6 @@ label {
   position: relative;
 }
 
-/*
-  FIX: The drag handle was implemented BOTH as a ::before pseudo-element on
-  .modal-sheet AND as a separate .modal__drag-handle div in customer.html.
-  The ::before pseudo approach has been removed to avoid duplication.
-  The .modal__drag-handle div in the HTML is the single source of truth.
-  Style it here:
-*/
 .modal__drag-handle {
   width: 40px;
   height: 4px;
@@ -632,12 +589,7 @@ label {
   gap: var(--space-2);
 }
 
-/* ── Section padding (replaces inline styles on sections) ─── */
-/*
-  FIX: #section-order, #section-checkout, #section-tracker all had
-  inline style="padding-bottom:120px" which conflicted with display:none
-  from the section toggle system. Padding is now managed here.
-*/
+/* ── Section padding ──────────────────────────────────────── */
 #section-order,
 #section-checkout,
 #section-tracker {
@@ -697,7 +649,7 @@ label {
   font-size: var(--text-sm);
   font-weight: 500;
   box-shadow: var(--shadow-xl);
-  pointer-events: all; /* FIX: ensure toasts inside the container are clickable */
+  pointer-events: all;
   width: 100%;
   text-align: center;
 }
@@ -904,13 +856,6 @@ button:focus-visible,
 .install-btn:hover { background: rgba(255,255,255,0.15); }
 
 /* ── Tabs ─────────────────────────────────────────────────── */
-/*
-  FIX: The tab active indicator used margin-bottom: -2px to overlap the
-  parent border. This worked visually but caused sub-pixel inconsistencies
-  across browsers. Replaced with a cleaner approach: the parent border is
-  on the wrapper, active tab uses a pseudo-element so there's no negative
-  margin hack.
-*/
 .tabs {
   display: flex;
   border-bottom: 2px solid #e5e7eb;
@@ -933,11 +878,10 @@ button:focus-visible,
   transition: color var(--transition-fast);
 }
 
-/* Active indicator via ::after — no negative margin needed */
 .tab-btn::after {
   content: '';
   position: absolute;
-  bottom: -2px; /* sits on top of parent border */
+  bottom: -2px;
   left: 0;
   right: 0;
   height: 2px;
@@ -1048,30 +992,9 @@ button:focus-visible,
   color: var(--color-muted);
 }
 
-/*
-  FIX: .timeline-item.active previously used:
-    border-left: 3px solid var(--color-sage);
-    padding-left: var(--space-3);
-    margin-left: -3px;
-  The negative margin-left caused layout shift and clipped left-edge content.
-  Replaced with a box-shadow left accent which doesn't affect layout geometry.
-
-  FIX: @keyframes pulse-border was referenced but never defined. Added here.
-*/
 .timeline-item.active {
   box-shadow: inset 3px 0 0 var(--color-sage);
   padding-left: calc(var(--space-3) + 3px);
-}
-
-@keyframes pulse-border {
-  0%, 100% { box-shadow: inset 3px 0 0 var(--color-sage); }
-  50%       { box-shadow: inset 3px 0 0 var(--color-sage-mid); }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .timeline-item.active {
-    animation: pulse-border 2s ease-in-out infinite;
-  }
 }
 
 /* ── WhatsApp Button ──────────────────────────────────────── */

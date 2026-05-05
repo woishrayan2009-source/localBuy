@@ -9,6 +9,7 @@
  *  - Toast notification system
  *  - Shared time parsing utilities
  *  - Page load animation trigger
+ *  - Landing page shop card rendering + chip filtering (M1 fix)
  */
 
 'use strict';
@@ -18,17 +19,12 @@
 const LB_INSTALL_DISMISSED_KEY = 'lb_install_dismissed';
 let deferredInstallPrompt = null;
 
-// FIX: Guard the beforeinstallprompt handler so it can't fire before
-// the DOM is ready. Store the event and only show the banner once DOM loads.
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredInstallPrompt = e;
 
   if (localStorage.getItem(LB_INSTALL_DISMISSED_KEY) === 'true') return;
 
-  // FIX: Only call showInstallBanner if DOM is already ready;
-  // otherwise defer until DOMContentLoaded to avoid a race condition
-  // where the banner element doesn't exist yet.
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', showInstallBanner, { once: true });
   } else {
@@ -44,20 +40,16 @@ window.addEventListener('appinstalled', () => {
 
 function showInstallBanner() {
   const banner = document.getElementById('install-banner');
-  if (!banner) return; // Not all pages have an install banner — safe to skip
+  if (!banner) return;
   banner.style.display = 'flex';
   requestAnimationFrame(() => banner.classList.add('visible'));
 }
 
-// FIX: The 'exiting' animation class was referenced but no @keyframes or CSS
-// rule existed for it. We now inject the required styles here, ensuring the
-// exit animation works regardless of which CSS file is loaded.
 function hideInstallBanner(withAnimation = false) {
   const banner = document.getElementById('install-banner');
   if (!banner) return;
 
   if (withAnimation) {
-    // Inject exit animation styles if not already present
     if (!document.getElementById('lb-install-banner-exit-style')) {
       const style = document.createElement('style');
       style.id = 'lb-install-banner-exit-style';
@@ -124,7 +116,7 @@ function shareOnWhatsApp(customMessage) {
 }
 
 function initWhatsAppButtons() {
-  document.querySelectorAll('[data-action="whatsapp-share"]').forEach(btn => {
+  document.querySelectorAll('[data-action="whatsapp-share"], [data-wa-share]').forEach(btn => {
     btn.addEventListener('click', () => {
       const msg = btn.dataset.shareMessage || null;
       shareOnWhatsApp(msg);
@@ -252,9 +244,6 @@ function createModal({
     });
   }
 
-  // FIX: Backdrop tap previously called onCancel() even when onCancel was
-  // undefined (only the button creation was guarded, not the backdrop handler).
-  // Now we explicitly check before calling.
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) {
       closeModal();
@@ -282,10 +271,6 @@ function showToast(message, type = 'info', duration = 3500) {
     warn:    'var(--status-busy, #d97706)'
   };
 
-  // FIX: pointer-events was 'none' on the container, which blocked any
-  // interactive elements inside toasts. Set pointer-events on individual
-  // toasts to 'all' so they remain interactive while the container stays
-  // transparent to clicks in empty areas.
   toast.style.cssText = `
     background: var(--color-ink, #111827);
     color: #fff;
@@ -323,8 +308,6 @@ function getOrCreateToastContainer() {
     container = document.createElement('div');
     container.id = 'lb-toast-container';
     container.setAttribute('aria-live', 'polite');
-    // FIX: pointer-events: none on container so it doesn't block page clicks
-    // in the empty area. Individual toasts set pointer-events: all.
     container.style.cssText = `
       position: fixed;
       bottom: 80px;
@@ -362,12 +345,6 @@ function getOrCreateToastContainer() {
 
 /**
  * Parse a time string like "8:30 PM" or "14:30" into { hours, minutes } (24h).
- *
- * FIX: Previously, if neither regex matched, the function returned { 0, 0 }
- * but accessing `match12[3]` on a null match would throw a TypeError.
- * Guards are now in place and the function gracefully returns { hours:0, minutes:0 }
- * for any unrecognised format.
- *
  * @param {string} timeStr
  * @returns {{ hours: number, minutes: number }}
  */
@@ -375,25 +352,21 @@ function parseTime(timeStr) {
   if (!timeStr || typeof timeStr !== 'string') return { hours: 0, minutes: 0 };
   timeStr = timeStr.trim();
 
-  // Try 12-hour format: "8:30 PM"
   const match12 = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (match12) {
     let hours = parseInt(match12[1], 10);
     const minutes = parseInt(match12[2], 10);
-    // FIX: match12[3] access is now inside the guard block — safe
     const period = match12[3].toUpperCase();
     if (period === 'PM' && hours !== 12) hours += 12;
     if (period === 'AM' && hours === 12) hours = 0;
     return { hours, minutes };
   }
 
-  // Try 24-hour format: "14:30"
   const match24 = timeStr.match(/^(\d{1,2}):(\d{2})$/);
   if (match24) {
     return { hours: parseInt(match24[1], 10), minutes: parseInt(match24[2], 10) };
   }
 
-  // Unrecognised format — return safe default
   return { hours: 0, minutes: 0 };
 }
 
@@ -418,17 +391,6 @@ function addMinutes(date, minutes) {
 
 /**
  * Get shop status based on current time vs shop hours.
- *
- * FIX: The original logic had a precedence bug. The 'closing-soon' check
- * used `addMinutes(lastOrderDate, -30)` which computes "30 min before last order".
- * But it was evaluated BEFORE the 'open' check, meaning a shop that was, say,
- * 60 minutes before closing would match the `now > addMinutes(lastOrderDate, -30)`
- * test (since that value is still in the past) and be marked 'closing-soon'
- * instead of 'open'. The corrected order is:
- *   1. Already past last-order time → 'post-buffer'
- *   2. Within 30 min of last-order time → 'closing-soon'
- *   3. Otherwise → 'open'
- *
  * @param {Object} shop - shop object with lastOrder property (e.g. "8:30 PM")
  * @returns {'open' | 'closing-soon' | 'post-buffer'}
  */
@@ -438,21 +400,16 @@ function getShopStatus(shop) {
   const lastOrderDate = new Date();
   lastOrderDate.setHours(hours, minutes, 0, 0);
 
-  // Step 1: Already past last order time
   if (now > lastOrderDate) return 'post-buffer';
 
-  // Step 2: Within 30 minutes of last order (warning window)
-  // "30 min before last order" = lastOrderDate minus 30 min
   const warnAt = addMinutes(lastOrderDate, -30);
   if (now >= warnAt) return 'closing-soon';
 
-  // Step 3: Still comfortably open
   return 'open';
 }
 
 /**
  * Format currency in Indian rupees
- * FIX: Wrapped in try/catch for environments where Intl is unavailable.
  * @param {number} amount
  * @returns {string}
  */
@@ -465,17 +422,11 @@ function formatINR(amount) {
       maximumFractionDigits: 2
     }).format(amount);
   } catch (_) {
-    // Fallback for environments without Intl support
     return `₹${Number(amount).toFixed(0)}`;
   }
 }
 
 // ─── Debounce ─────────────────────────────────────────────────────────────────
-/**
- * @param {Function} fn
- * @param {number} delay
- * @returns {Function}
- */
 function debounce(fn, delay) {
   let timer;
   return function (...args) {
@@ -536,6 +487,110 @@ function initButtonActiveStates() {
   }
 }
 
+// ─── FIX M1: Landing page shop card rendering + chip filtering ────────────────
+/**
+ * renderLandingShopCards(shops)
+ * Renders shop cards into the #shop-grid on index.html.
+ * Only runs when window.MOCK_SHOPS is available (from db-bridge.js).
+ * @param {Array} shops
+ */
+function renderLandingShopCards(shops) {
+  const grid = document.getElementById('shop-grid');
+  if (!grid) return;
+
+  // Remove skeleton placeholders
+  grid.querySelectorAll('.skeleton').forEach(el => el.remove());
+
+  if (!shops || shops.length === 0) {
+    grid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:var(--color-muted);padding:24px;">No shops found.</p>';
+    return;
+  }
+
+  grid.innerHTML = shops.map(shop => {
+    const statusLabel = { open: 'Open', busy: 'Busy', closed: 'Closed' }[shop.status] || '';
+    const statusClass = `status-badge--${shop.status}`;
+    return `
+      <div class="shop-card"
+           data-shop-id="${shop.id}"
+           data-category="${shop.category}"
+           role="listitem"
+           tabindex="0"
+           aria-label="${shop.name}, ${statusLabel}">
+        <div class="shop-card__icon" aria-hidden="true">${shop.emoji}</div>
+        <p class="shop-card__name">${shop.name}</p>
+        <p class="shop-card__meta">📍 ${shop.distance} · ⏱ ${shop.ready}</p>
+        <span class="status-badge ${statusClass}" role="status">
+          <span class="status-dot" aria-hidden="true"></span>
+          ${statusLabel}
+        </span>
+      </div>
+    `;
+  }).join('');
+
+  // Each card links to customer.html
+  grid.querySelectorAll('.shop-card').forEach(card => {
+    const go = () => {
+      window.location.href = `customer.html#browse`;
+    };
+    card.addEventListener('click', go);
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    });
+  });
+}
+
+/**
+ * initLandingChips()
+ * Wires category chip clicks on index.html to filter #shop-grid cards.
+ * FIX M1: This was missing from app.js entirely.
+ */
+function initLandingChips() {
+  const chips = document.querySelectorAll('.category-chips .chip[data-category]');
+  if (!chips.length) return;
+
+  // Get shops from db-bridge.js global
+  const allShops = window.MOCK_SHOPS || [];
+
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      // Update active chip
+      chips.forEach(c => {
+        c.classList.remove('active');
+        c.setAttribute('aria-pressed', 'false');
+      });
+      chip.classList.add('active');
+      chip.setAttribute('aria-pressed', 'true');
+
+      const cat = chip.dataset.category;
+      const filtered = cat === 'all'
+        ? allShops
+        : allShops.filter(s => s.category === cat);
+
+      renderLandingShopCards(filtered);
+    });
+  });
+}
+
+/**
+ * initLandingPage()
+ * Entry point for index.html. Called on DOMContentLoaded.
+ * Renders shop cards and wires up chip filtering.
+ */
+function initLandingPage() {
+  // Only run on pages that have a landing shop-grid (index.html)
+  const grid = document.getElementById('shop-grid');
+  if (!grid) return;
+
+  // Check this is the landing page (index.html), not customer.html
+  // customer.html manages its own grid via customer.js
+  const isCustomerPage = document.getElementById('section-browse') !== null;
+  if (isCustomerPage) return;
+
+  const allShops = window.MOCK_SHOPS || [];
+  renderLandingShopCards(allShops);
+  initLandingChips();
+}
+
 // ─── Namespace export ─────────────────────────────────────────────────────────
 window.LB = {
   // Install
@@ -565,19 +620,15 @@ window.LB = {
   initBackButtons,
   initButtonActiveStates,
 
-  /**
-   * Analytics stub.
-   * FIX: console.log removed from production path. Logging is now gated
-   * behind a debug flag so it doesn't leak data in production builds.
-   * Replace the body with your real analytics call (Firebase, PostHog, etc.).
-   * Never log PII (phone numbers, order content).
-   */
+  // Landing page (M1)
+  initLandingPage,
+  renderLandingShopCards,
+  initLandingChips,
+
   analytics: (eventName, params = {}) => {
     if (typeof __LB_DEBUG__ !== 'undefined' && __LB_DEBUG__) {
       console.log('[Analytics]', eventName, params);
     }
-    // TODO: POST to /api/analytics or use Firebase Analytics
-    // Example: firebase.analytics().logEvent(eventName, params);
   }
 };
 
@@ -588,4 +639,8 @@ document.addEventListener('DOMContentLoaded', () => {
   LB.initStaggerAnimations();
   LB.initBackButtons();
   LB.initButtonActiveStates();
+
+  // FIX M1: render shop cards + wire chips on landing page
+  // db-bridge.js loads before app.js so MOCK_SHOPS is available here
+  LB.initLandingPage();
 });
