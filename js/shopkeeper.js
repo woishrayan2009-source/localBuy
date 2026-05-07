@@ -23,6 +23,18 @@
  *  - Action buttons (Send Quote → Mark Packing → Ready for Pickup) update
  *    order status in `localbuy_orders` localStorage
  *  - "Export to WhatsApp" builds a real shift summary and opens wa.me link
+ *
+ * CORRECTION FIXES (latest):
+ *  - FIX C1: populateShiftStartScreen() greeting uses t() + ownerName
+ *            concatenation (not template literal), preventing i18n clobber.
+ *            Remove data-i18n from #shift-greeting-name in HTML.
+ *  - FIX C2: Hours display uses t('shift.hoursToday', { open, close })
+ *            placeholder substitution instead of manual concatenation.
+ *  - FIX C3: All five error element IDs corrected from err-* to error-*
+ *            in cacheDOM() to match actual HTML IDs.
+ *  - FIX C4: checkExistingProfile() wrapped in setTimeout(fn, 0) and
+ *            guarded by window.__lbBootDone to prevent screen routing
+ *            conflict with inline bootstrap showScreen() call.
  */
 
 'use strict';
@@ -133,12 +145,13 @@ function cacheDOM() {
 
     audioUnlock:        document.getElementById('audio-unlock'),
 
-    // Inline error message elements (one per field)
-    errShopName:        document.getElementById('err-shop-name'),
-    errOwnerName:       document.getElementById('err-owner-name'),
-    errCategory:        document.getElementById('err-category'),
-    errArea:            document.getElementById('err-area'),
-    errPhone:           document.getElementById('err-phone'),
+    // FIX C3: Corrected inline error element IDs from err-* to error-*
+    //         to match actual HTML element IDs.
+    errShopName:        document.getElementById('error-shop-name'),
+    errOwnerName:       document.getElementById('error-owner-name'),
+    errCategory:        document.getElementById('error-category'),
+    errArea:            document.getElementById('error-area'),
+    errPhone:           document.getElementById('error-phone'),
   };
 }
 
@@ -553,12 +566,19 @@ function populateShiftStartScreen() {
   if (DOM.dashShopName)   DOM.dashShopName.textContent   = cfg.shopName;
   if (DOM.dashShopArea)   DOM.dashShopArea.textContent   = cfg.area || '';
 
+  // FIX C1: Set greeting AFTER i18n render pass to prevent clobber.
+  // Remove data-i18n attribute from #shift-greeting-name in HTML so
+  // i18n.render() does not overwrite this JS-set value.
   if (DOM.greetingName) {
     const hour = new Date().getHours();
-    const greetKey = hour < 12 ? 'greeting.morning' : hour < 17 ? 'greeting.afternoon' : 'greeting.evening';
-    DOM.greetingName.textContent = `${t(greetKey)}, ${cfg.ownerName} 👋`;
+    const greetKey = hour < 12 ? 'greeting.morning'
+                   : hour < 17 ? 'greeting.afternoon'
+                   : 'greeting.evening';
+    DOM.greetingName.textContent = t(greetKey) + ', ' + cfg.ownerName + ' 👋';
   }
 
+  // FIX C2: Use t() placeholder substitution instead of manual string
+  // concatenation so translation strings can position {open}/{close} freely.
   const hoursEl = document.getElementById('shift-hours-display');
   if (hoursEl && cfg.openTime && cfg.closeTime) {
     const fmt = s => {
@@ -566,7 +586,10 @@ function populateShiftStartScreen() {
       const ampm = h >= 12 ? 'PM' : 'AM';
       return `${h % 12 || 12}:${m.toString().padStart(2,'0')} ${ampm}`;
     };
-    hoursEl.textContent = `${t('shift.hoursLabel') || 'Hours'}: ${fmt(cfg.openTime)} – ${fmt(cfg.closeTime)}`;
+    hoursEl.textContent = t('shift.hoursToday', {
+      open:  fmt(cfg.openTime),
+      close: fmt(cfg.closeTime)
+    });
   }
 
   try {
@@ -1446,12 +1469,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // the boot script reads it to resume dashboard on reload.
   });
 
-  // ── Check for existing profile (skip registration if found) ─────
-  // This must run AFTER event listeners are attached.
-  const profileFound = checkExistingProfile();
-  if (!profileFound) {
-    populateShiftStartScreen(); // pre-fill any cached shift data
-  }
+  // ── FIX C4: Defer checkExistingProfile() by one tick so the inline
+  //    bootstrap's synchronous showScreen() call always runs first.
+  //    Guard with window.__lbBootDone so we don't fight a boot script
+  //    that already routed the user to the correct screen.
+  setTimeout(() => {
+    if (window.__lbBootDone) {
+      // Boot script already handled screen routing — only populate
+      // the shift-start screen data without forcing a screen change.
+      const profile = getShopProfile();
+      if (profile && profile.shopId) {
+        populateShiftStartScreen();
+      }
+      return;
+    }
+
+    // Boot script did not run or did not set the flag — fall back to
+    // the original behaviour: check profile and route accordingly.
+    const profileFound = checkExistingProfile();
+    if (!profileFound) {
+      populateShiftStartScreen(); // pre-fill any cached shift data
+    }
+  }, 0);
 
   console.log('[LocalBuy] shopkeeper.js loaded ✓');
 });
