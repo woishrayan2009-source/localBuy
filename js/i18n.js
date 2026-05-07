@@ -8,12 +8,13 @@
      i18n.t('order.total', { amount: '₹347' })
 
    Fixes applied:
-     - localStorage key unified to 'localbuy_lang' (was 'lb_lang')
+     - localStorage key unified to 'lb_lang' (matches shopkeeper.html / shopkeeper.js)
      - aria-pressed updated correctly on language button switch
      - render() covers [data-i18n], [data-i18n-placeholder],
        [data-i18n-aria], and select <option> elements
      - All 4 language tables are complete and consistent
      - register.* keys present in all 4 languages
+     - greeting.morning / greeting.afternoon / greeting.evening added in all 4 languages
    ============================================================ */
 
 const STRINGS = {
@@ -68,6 +69,11 @@ const STRINGS = {
     'cat.dairy':                    '🥛 Dairy',
     'cat.beauty':                   '💄 Beauty',
     'cat.fish':                     '🐟 Fish & Meat',
+
+    // Greetings
+    'greeting.morning':             'Good morning',
+    'greeting.afternoon':           'Good afternoon',
+    'greeting.evening':             'Good evening',
 
     // Shift management
     'shift.greeting':               'Good morning',
@@ -264,6 +270,11 @@ const STRINGS = {
     'cat.beauty':                   '💄 ब्यूटी',
     'cat.fish':                     '🐟 मछली और मांस',
 
+    // Greetings
+    'greeting.morning':             'शुभ सुबह',
+    'greeting.afternoon':           'शुभ दोपहर',
+    'greeting.evening':             'शुभ शाम',
+
     // Shift management
     'shift.greeting':               'सुप्रभात',
     'shift.statusOffline':          '🔴 ऑफ़लाइन — दुकान छुपी हुई है',
@@ -458,6 +469,11 @@ const STRINGS = {
     'cat.dairy':                    '🥛 ডেয়ারি',
     'cat.beauty':                   '💄 বিউটি',
     'cat.fish':                     '🐟 মাছ ও মাংস',
+
+    // Greetings
+    'greeting.morning':             'শুভ সকাল',
+    'greeting.afternoon':           'শুভ বিকাল',
+    'greeting.evening':             'শুভ সন্ধ্যা',
 
     // Shift management
     'shift.greeting':               'শুভ সকাল',
@@ -654,6 +670,11 @@ const STRINGS = {
     'cat.beauty':                   '💄 বিউটি',
     'cat.fish':                     '🐟 মাছ আৰু মাংস',
 
+    // Greetings
+    'greeting.morning':             'শুভ পুৱা',
+    'greeting.afternoon':           'শুভ দুপৰীয়া',
+    'greeting.evening':             'শুভ সন্ধিয়া',
+
     // Shift management
     'shift.greeting':               'শুভ পুৱা',
     'shift.statusOffline':          '🔴 অফলাইন — দোকান গ্ৰাহকৰ পৰা লুকুৱা',
@@ -801,8 +822,8 @@ const STRINGS = {
 
 /* ── i18n Module ──────────────────────────────────────────── */
 const i18n = (() => {
-  // FIX: unified localStorage key to 'localbuy_lang' (was 'lb_lang')
-  const STORAGE_KEY = 'localbuy_lang';
+  // FIX: storage key unified to 'lb_lang' (matches shopkeeper.html / shopkeeper.js)
+  const STORAGE_KEY = 'lb_lang';
 
   let currentLang = localStorage.getItem(STORAGE_KEY) || 'en';
 
@@ -824,7 +845,7 @@ const i18n = (() => {
   }
 
   /**
-   * Change language. Persists to localStorage under 'localbuy_lang'.
+   * Change language. Persists to localStorage under 'lb_lang'.
    * Re-renders all [data-i18n] elements and updates aria-pressed on
    * language buttons.
    */
