@@ -10,6 +10,19 @@
  * FIX H5: Added window.addEventListener('beforeunload') to clear
  *         autoCloseInterval and persist shift state so a page refresh
  *         mid-shift doesn't create a double-interval situation.
+ *
+ * ADDITIONAL FIXES:
+ *  - Registration validates ALL required fields with inline error messages
+ *  - On valid submission, saves to `localbuy_shopProfile` in localStorage
+ *    and shows dashboard immediately
+ *  - On page load, checks for existing `localbuy_shopProfile` and skips
+ *    registration form if found
+ *  - Dashboard header reads shop name and area from `localbuy_shopProfile`
+ *  - Orders feed reads from `localbuy_orders` in localStorage, filtered by
+ *    shopId, and renders with correct action buttons
+ *  - Action buttons (Send Quote → Mark Packing → Ready for Pickup) update
+ *    order status in `localbuy_orders` localStorage
+ *  - "Export to WhatsApp" builds a real shift summary and opens wa.me link
  */
 
 'use strict';
@@ -60,6 +73,7 @@ function cacheDOM() {
     statYestAvgTime:    document.getElementById('stat-yesterday-avgtime'),
 
     dashShopName:       document.getElementById('dash-shop-name'),
+    dashShopArea:       document.getElementById('dash-shop-area'),
     dashStatusToggle:   document.getElementById('dash-status-toggle'),
     dashStatusLabel:    document.getElementById('dash-status-label'),
     btnEndShift:        document.getElementById('btn-end-shift'),
@@ -118,6 +132,13 @@ function cacheDOM() {
     appModalConfirm:    document.getElementById('app-modal-confirm'),
 
     audioUnlock:        document.getElementById('audio-unlock'),
+
+    // Inline error message elements (one per field)
+    errShopName:        document.getElementById('err-shop-name'),
+    errOwnerName:       document.getElementById('err-owner-name'),
+    errCategory:        document.getElementById('err-category'),
+    errArea:            document.getElementById('err-area'),
+    errPhone:           document.getElementById('err-phone'),
   };
 }
 
@@ -160,8 +181,28 @@ function msToMins(ms) {
   return Math.round(ms / 60000) + ' min';
 }
 
+/**
+ * getShopConfig — reads from the canonical `localbuy_shopProfile` key
+ * (and falls back to legacy `lb_*` keys for backward compatibility).
+ */
 function getShopConfig() {
   try {
+    const profile = getShopProfile();
+    if (profile && profile.shopId) {
+      return {
+        shopId:    profile.shopId,
+        shopName:  profile.shopName  || t('shop.defaultName'),
+        ownerName: profile.ownerName || '',
+        openTime:  profile.openTime  || '08:00',
+        closeTime: profile.closeTime || '21:00',
+        lastOrder: profile.lastOrder || '20:30',
+        phone:     profile.phone     || '',
+        category:  profile.category  || '',
+        area:      profile.area      || '',
+        upi:       profile.upi       || '',
+      };
+    }
+    // Legacy fallback
     return {
       shopId:    localStorage.getItem('lb_shop_id')    || '',
       shopName:  localStorage.getItem('lb_shop_name')  || t('shop.defaultName'),
@@ -172,8 +213,76 @@ function getShopConfig() {
       phone:     localStorage.getItem('lb_phone')      || '',
       category:  localStorage.getItem('lb_category')   || '',
       area:      localStorage.getItem('lb_area')       || '',
+      upi:       '',
     };
   } catch(e) { return {}; }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SHOP PROFILE — canonical localStorage key: localbuy_shopProfile
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Returns the parsed shop profile object, or null if not set.
+ */
+function getShopProfile() {
+  try {
+    const raw = localStorage.getItem('localbuy_shopProfile');
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
+/**
+ * Saves the shop profile to `localbuy_shopProfile`.
+ */
+function saveShopProfile(profile) {
+  try {
+    localStorage.setItem('localbuy_shopProfile', JSON.stringify(profile));
+  } catch(e) {
+    console.error('[ShopProfile] Save failed:', e);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  ORDERS — localStorage key: localbuy_orders
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Reads all orders from localStorage.
+ */
+function getAllOrders() {
+  try {
+    return JSON.parse(localStorage.getItem('localbuy_orders') || '[]');
+  } catch(e) { return []; }
+}
+
+/**
+ * Writes all orders back to localStorage.
+ */
+function saveAllOrders(orders) {
+  try {
+    localStorage.setItem('localbuy_orders', JSON.stringify(orders));
+  } catch(e) { console.error('[Orders] Save failed:', e); }
+}
+
+/**
+ * Returns orders filtered by shopId.
+ */
+function getOrdersForShop(shopId) {
+  return getAllOrders().filter(o => o.shopId === shopId);
+}
+
+/**
+ * Updates a single order's fields in `localbuy_orders`.
+ * Returns the updated order or null on failure.
+ */
+function updateOrderInStorage(orderId, patch) {
+  const orders = getAllOrders();
+  const idx = orders.findIndex(o => o.id === orderId);
+  if (idx === -1) return null;
+  orders[idx] = { ...orders[idx], ...patch };
+  saveAllOrders(orders);
+  return orders[idx];
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -212,10 +321,8 @@ function hideModal() {
 // ══════════════════════════════════════════════════════════════════
 //  TOAST NOTIFICATIONS
 //
-//  FIX H2: No longer assigns to window.showToast.
-//  This function writes to #toast-container in shopkeeper.html.
-//  app.js's LB.toast writes to #lb-toast-container (different element).
-//  Both coexist on the same page without conflict.
+//  FIX H2: NOT assigned to window.showToast — avoids overwriting
+//  app.js's version. Writes to #toast-container in shopkeeper.html.
 // ══════════════════════════════════════════════════════════════════
 
 function showToast(message, type = '', duration = 3000) {
@@ -244,7 +351,8 @@ function showShopkeeperAlert(type, message) {
   const el = DOM.shopkeeperAlert;
   if (!el) return;
   el.className = `shopkeeper-alert ${type}`;
-  el.querySelector('.alert-text').textContent = message;
+  const textEl = el.querySelector('.alert-text');
+  if (textEl) textEl.textContent = message;
   el.removeAttribute('hidden');
 }
 
@@ -253,45 +361,150 @@ function hideShopkeeperAlert() {
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  INLINE FIELD ERROR HELPERS
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Shows an inline error below a field.
+ * @param {HTMLElement|null} errEl  - the error <span> element
+ * @param {HTMLElement|null} inputEl - the input to highlight
+ * @param {string} message
+ */
+function showFieldError(errEl, inputEl, message) {
+  if (errEl) {
+    errEl.textContent = message;
+    errEl.removeAttribute('hidden');
+    errEl.setAttribute('role', 'alert');
+  }
+  if (inputEl) {
+    inputEl.setAttribute('aria-invalid', 'true');
+    inputEl.classList.add('input-error');
+  }
+}
+
+/**
+ * Clears inline error for a field.
+ */
+function clearFieldError(errEl, inputEl) {
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.setAttribute('hidden', '');
+  }
+  if (inputEl) {
+    inputEl.removeAttribute('aria-invalid');
+    inputEl.classList.remove('input-error');
+  }
+}
+
+/**
+ * Clears all registration field errors.
+ */
+function clearAllFieldErrors() {
+  clearFieldError(DOM.errShopName,  DOM.inputShopName);
+  clearFieldError(DOM.errOwnerName, DOM.inputOwnerName);
+  clearFieldError(DOM.errCategory,  DOM.inputCategory);
+  clearFieldError(DOM.errArea,      DOM.inputArea);
+  clearFieldError(DOM.errPhone,     DOM.inputPhone);
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  REGISTRATION
+//
+//  FIX: Full field validation with inline errors.
+//       Saves to `localbuy_shopProfile`, then shows dashboard.
+//       On page load, checks for existing profile and skips form.
 // ══════════════════════════════════════════════════════════════════
 
 async function handleRegistration() {
-  const { inputShopName, inputOwnerName, inputCategory, inputArea,
-          inputPhone, inputOpenTime, inputCloseTime, inputLastOrder,
-          inputUpi, btnRegister } = DOM;
+  const {
+    inputShopName, inputOwnerName, inputCategory, inputArea,
+    inputPhone, inputOpenTime, inputCloseTime, inputLastOrder,
+    inputUpi, btnRegister,
+    errShopName, errOwnerName, errCategory, errArea, errPhone,
+  } = DOM;
 
-  const shopName  = inputShopName?.value.trim();
-  const ownerName = inputOwnerName?.value.trim();
-  const category  = inputCategory?.value;
-  const area      = inputArea?.value.trim();
-  const phone     = inputPhone?.value.trim();
-  const openTime  = inputOpenTime?.value;
-  const closeTime = inputCloseTime?.value;
-  const lastOrder = inputLastOrder?.value;
+  // Clear previous errors
+  clearAllFieldErrors();
 
-  if (!shopName)  { showToast(t('register.error.shopName'), 'error'); inputShopName?.focus(); return; }
-  if (!ownerName) { showToast(t('register.error.ownerName'), 'error'); inputOwnerName?.focus(); return; }
-  if (!category)  { showToast(t('register.error.category'), 'error'); inputCategory?.focus(); return; }
-  if (!area)      { showToast(t('register.error.area'), 'error'); inputArea?.focus(); return; }
-  if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
-    showToast(t('register.error.phone'), 'error'); inputPhone?.focus(); return;
+  const shopName  = inputShopName?.value.trim()  || '';
+  const ownerName = inputOwnerName?.value.trim()  || '';
+  const category  = inputCategory?.value          || '';
+  const area      = inputArea?.value.trim()       || '';
+  const phone     = inputPhone?.value.trim()      || '';
+  const openTime  = inputOpenTime?.value          || '08:00';
+  const closeTime = inputCloseTime?.value         || '21:00';
+  const lastOrder = inputLastOrder?.value         || '20:30';
+  const upi       = inputUpi?.value.trim()        || '';
+
+  // ── Validate all fields, collecting errors (show all at once) ──
+  let hasError = false;
+
+  if (!shopName) {
+    showFieldError(errShopName, inputShopName, t('register.error.shopName') || 'Shop name is required.');
+    hasError = true;
   }
 
-  if (btnRegister) { btnRegister.disabled = true; btnRegister.textContent = t('register.saving'); }
+  if (!ownerName) {
+    showFieldError(errOwnerName, inputOwnerName, t('register.error.ownerName') || 'Owner name is required.');
+    hasError = true;
+  }
+
+  if (!category) {
+    showFieldError(errCategory, inputCategory, t('register.error.category') || 'Please select a category.');
+    hasError = true;
+  }
+
+  if (!area) {
+    showFieldError(errArea, inputArea, t('register.error.area') || 'Area / locality is required.');
+    hasError = true;
+  }
+
+  if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+    showFieldError(errPhone, inputPhone, t('register.error.phone') || 'Enter a valid 10-digit mobile number.');
+    hasError = true;
+  }
+
+  if (hasError) {
+    // Focus first errored field
+    const firstInvalid = [inputShopName, inputOwnerName, inputCategory, inputArea, inputPhone]
+      .find(el => el?.getAttribute('aria-invalid') === 'true');
+    firstInvalid?.focus();
+    return;
+  }
+
+  // ── Save ──
+  if (btnRegister) { btnRegister.disabled = true; btnRegister.textContent = t('register.saving') || 'Saving…'; }
 
   try {
     const shopId = 'SHOP-' + Date.now();
 
+    const profile = {
+      shopId,
+      shopName,
+      ownerName,
+      category,
+      area,
+      phone,
+      upi,
+      openTime,
+      closeTime,
+      lastOrder,
+      registeredAt: new Date().toISOString(),
+    };
+
+    // Save to canonical key
+    saveShopProfile(profile);
+
+    // Also mirror to legacy keys so any code still reading lb_* works
     localStorage.setItem('lb_shop_id',    shopId);
     localStorage.setItem('lb_shop_name',  shopName);
     localStorage.setItem('lb_owner_name', ownerName);
     localStorage.setItem('lb_category',   category);
     localStorage.setItem('lb_area',       area);
     localStorage.setItem('lb_phone',      phone);
-    localStorage.setItem('lb_open_time',  openTime  || '08:00');
-    localStorage.setItem('lb_close_time', closeTime || '21:00');
-    localStorage.setItem('lb_last_order', lastOrder || '20:30');
+    localStorage.setItem('lb_open_time',  openTime);
+    localStorage.setItem('lb_close_time', closeTime);
+    localStorage.setItem('lb_last_order', lastOrder);
     localStorage.removeItem('lb_shift_ended');
     localStorage.removeItem('lb_shift_active');
 
@@ -299,16 +512,33 @@ async function handleRegistration() {
       DB.logEvent('shop_registered', { category, area });
     }
 
-    showToast(t('register.success'), 'success');
+    showToast(t('register.success') || 'Shop registered!', 'success');
     populateShiftStartScreen();
     window.showScreen('shift-start');
 
   } catch(err) {
     console.error('[Register] Error:', err);
-    showToast(t('register.error.generic'), 'error');
+    showToast(t('register.error.generic') || 'Registration failed. Please try again.', 'error');
   } finally {
-    if (btnRegister) { btnRegister.disabled = false; btnRegister.textContent = t('register.submit'); }
+    if (btnRegister) {
+      btnRegister.disabled = false;
+      btnRegister.textContent = t('register.submit') || 'Register Shop';
+    }
   }
+}
+
+/**
+ * On page load: if a profile already exists in `localbuy_shopProfile`,
+ * skip the registration form and jump straight to shift-start screen.
+ */
+function checkExistingProfile() {
+  const profile = getShopProfile();
+  if (profile && profile.shopId) {
+    populateShiftStartScreen();
+    window.showScreen('shift-start');
+    return true;
+  }
+  return false;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -319,7 +549,10 @@ function populateShiftStartScreen() {
   const cfg = getShopConfig();
 
   if (DOM.shiftShopName)  DOM.shiftShopName.textContent  = cfg.shopName;
+  // Dashboard header: reads shop name AND area from profile
   if (DOM.dashShopName)   DOM.dashShopName.textContent   = cfg.shopName;
+  if (DOM.dashShopArea)   DOM.dashShopArea.textContent   = cfg.area || '';
+
   if (DOM.greetingName) {
     const hour = new Date().getHours();
     const greetKey = hour < 12 ? 'greeting.morning' : hour < 17 ? 'greeting.afternoon' : 'greeting.evening';
@@ -333,7 +566,7 @@ function populateShiftStartScreen() {
       const ampm = h >= 12 ? 'PM' : 'AM';
       return `${h % 12 || 12}:${m.toString().padStart(2,'0')} ${ampm}`;
     };
-    hoursEl.textContent = `${t('shift.hoursLabel')}: ${fmt(cfg.openTime)} – ${fmt(cfg.closeTime)}`;
+    hoursEl.textContent = `${t('shift.hoursLabel') || 'Hours'}: ${fmt(cfg.openTime)} – ${fmt(cfg.closeTime)}`;
   }
 
   try {
@@ -363,18 +596,20 @@ async function startShift() {
   // 3. Set shop online
   const cfg = getShopConfig();
   try {
-    DB.setShopStatus(cfg.shopId, 'online');
-    DB.logEvent('shift_started', { shopId: cfg.shopId });
+    if (window.DB) DB.setShopStatus(cfg.shopId, 'online');
+    if (window.DB) DB.logEvent('shift_started', { shopId: cfg.shopId });
   } catch(e) { console.warn('[DB] setShopStatus failed', e); }
 
-  // 4. Update dashboard UI
+  // 4. Update dashboard UI — reads from profile
+  updateDashboardHeader();
   updateDashboardStatus(true);
   updateStatsDisplay();
 
   // 5. Start auto-close guard
   startAutoCloseGuard();
 
-  // 6. Start listening for orders
+  // 6. Load orders from localStorage & start listening
+  loadOrdersFromStorage(cfg.shopId);
   startOrderListener(cfg.shopId);
 
   // 7. Navigate
@@ -399,8 +634,8 @@ async function endShift(auto = false) {
 
   const cfg = getShopConfig();
   try {
-    DB.setShopStatus(cfg.shopId, 'offline');
-    DB.logEvent('shift_ended', { shopId: cfg.shopId, ordersCount: shift.ordersCount, auto });
+    if (window.DB) DB.setShopStatus(cfg.shopId, 'offline');
+    if (window.DB) DB.logEvent('shift_ended', { shopId: cfg.shopId, ordersCount: shift.ordersCount, auto });
   } catch(e) {}
 
   const durationMs = shift.startTime ? (Date.now() - shift.startTime.getTime()) : 0;
@@ -423,14 +658,14 @@ async function endShift(auto = false) {
 
   if (DOM.summaryOrders)   DOM.summaryOrders.textContent   = shift.ordersCount;
   if (DOM.summaryEarnings) DOM.summaryEarnings.textContent = fmtCurrency(shift.earnings);
-  if (DOM.summaryAvgTime)  DOM.summaryAvgTime.textContent  = avgReady ? avgReady + ' min' : t('summary.na');
+  if (DOM.summaryAvgTime)  DOM.summaryAvgTime.textContent  = avgReady ? avgReady + ' min' : t('summary.na') || 'N/A';
   if (DOM.summaryDuration) DOM.summaryDuration.textContent = durationStr;
 
   const pendingCount = Array.from(orderCache.values()).filter(o => o.status !== 'ready' && o.status !== 'cancelled').length;
   if (pendingCount > 0 && DOM.pendingWarning) {
     DOM.pendingWarning.removeAttribute('hidden');
     if (DOM.pendingWarningText) {
-      DOM.pendingWarningText.textContent = t('shiftEnd.pendingWarning', { count: pendingCount });
+      DOM.pendingWarningText.textContent = t('shiftEnd.pendingWarning', { count: pendingCount }) || `${pendingCount} order(s) still pending.`;
     }
   }
 
@@ -438,17 +673,24 @@ async function endShift(auto = false) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  DASHBOARD HEADER — reads from localbuy_shopProfile
+// ══════════════════════════════════════════════════════════════════
+
+function updateDashboardHeader() {
+  const cfg = getShopConfig();
+  if (DOM.dashShopName) DOM.dashShopName.textContent = cfg.shopName || t('shop.defaultName');
+  if (DOM.dashShopArea) DOM.dashShopArea.textContent = cfg.area || '';
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  AUTO-CLOSE GUARD
 //
-//  FIX H5: Added beforeunload handler so that if shopkeeper refreshes
-//  mid-shift, lb_shift_active remains 'true' in localStorage (so the
-//  inline boot script in shopkeeper.html resumes to 'dashboard' screen).
-//  The interval is cleared on unload so garbage collection works cleanly.
-//  On the new page load, startShift() creates a fresh interval — no double.
+//  FIX H5: beforeunload handler clears interval to prevent double-timer
+//  on page refresh. lb_shift_active stays 'true' so the boot script
+//  correctly resumes to 'dashboard'. startShift() creates a fresh interval.
 // ══════════════════════════════════════════════════════════════════
 
 function startAutoCloseGuard() {
-  // Clear any existing interval first (defensive)
   if (autoCloseInterval) {
     clearInterval(autoCloseInterval);
     autoCloseInterval = null;
@@ -468,7 +710,7 @@ function checkAutoClose() {
   }
 
   if (now >= warningTime && now < closingTime) {
-    showShopkeeperAlert('warn', t('shift.closingSoon', { time: fmtTime(closingTime) }));
+    showShopkeeperAlert('warn', t('shift.closingSoon', { time: fmtTime(closingTime) }) || `Closing soon at ${fmtTime(closingTime)}`);
   }
 }
 
@@ -483,7 +725,7 @@ function updateDashboardStatus(isOnline) {
   dashStatusToggle.className = `status-pill-sm ${isOnline ? 'online' : 'offline'}`;
   dashStatusToggle.setAttribute('aria-pressed', isOnline ? 'true' : 'false');
   if (dashStatusLabel) {
-    dashStatusLabel.textContent = isOnline ? t('status.online') : t('status.offline');
+    dashStatusLabel.textContent = isOnline ? t('status.online') || 'Online' : t('status.offline') || 'Offline';
   }
 }
 
@@ -493,37 +735,78 @@ async function toggleShopStatus() {
   const cfg = getShopConfig();
 
   try {
-    DB.setShopStatus(cfg.shopId, newStatus ? 'online' : 'offline');
+    if (window.DB) DB.setShopStatus(cfg.shopId, newStatus ? 'online' : 'offline');
   } catch(e) {}
 
   updateDashboardStatus(newStatus);
-  showToast(newStatus ? t('status.wentOnline') : t('status.wentOffline'), newStatus ? 'success' : '');
+  showToast(
+    newStatus ? (t('status.wentOnline') || 'You are now Online') : (t('status.wentOffline') || 'You are now Offline'),
+    newStatus ? 'success' : ''
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════
 //  ORDER LISTENER + FEED
+//
+//  FIX: loadOrdersFromStorage() seeds the orderCache from
+//  `localbuy_orders` filtered by shopId so the feed reflects
+//  actual stored orders on shift start / page refresh.
 // ══════════════════════════════════════════════════════════════════
+
+/**
+ * Loads persisted orders from localStorage into the feed on shift start.
+ */
+function loadOrdersFromStorage(shopId) {
+  const stored = getOrdersForShop(shopId);
+  // Clear feed first
+  orderCache.clear();
+  if (DOM.ordersFeed) DOM.ordersFeed.innerHTML = '';
+
+  stored.forEach(order => {
+    orderCache.set(order.id, order);
+    prependOrderCard(order);
+  });
+
+  updateOrdersBadge();
+  updateStatsDisplay();
+
+  if (stored.length === 0 && DOM.ordersEmptyState) {
+    DOM.ordersEmptyState.style.display = '';
+  } else if (DOM.ordersEmptyState) {
+    DOM.ordersEmptyState.style.display = 'none';
+  }
+}
 
 function startOrderListener(shopId) {
   try {
-    orderListenerUnsubscribe = DB.listenOrders(shopId, onNewOrderFromDB);
+    if (window.DB && typeof DB.listenOrders === 'function') {
+      orderListenerUnsubscribe = DB.listenOrders(shopId, onNewOrderFromDB);
+    }
 
-    // DEMO: Inject a mock order after 2 seconds
-    setTimeout(() => {
-      const mockOrder = {
-        id:          'LB-' + Math.floor(8000 + Math.random() * 2000),
-        customerId:  'cust-demo',
-        customerName:'Priyanka B.',
-        orderText:   'Tata Salt 1kg × 2\nAmul Butter 500g\nMaggi Noodles × 3',
-        photoUrl:    null,
-        paymentType: 'pickup',
-        pickupTime:  new Date(Date.now() + 25 * 60000).toISOString(),
-        createdAt:   new Date().toISOString(),
-        status:      'pending',
-        shopId:      shopId,
-      };
-      onNewOrderFromDB(mockOrder);
-    }, 2000);
+    // DEMO: Inject a mock order after 2 seconds (only if localStorage has none)
+    if (getOrdersForShop(shopId).length === 0) {
+      setTimeout(() => {
+        const mockOrder = {
+          id:           'LB-' + Math.floor(8000 + Math.random() * 2000),
+          customerId:   'cust-demo',
+          customerName: 'Priyanka B.',
+          orderText:    'Tata Salt 1kg × 2\nAmul Butter 500g\nMaggi Noodles × 3',
+          photoUrl:     null,
+          paymentType:  'pickup',
+          pickupTime:   new Date(Date.now() + 25 * 60000).toISOString(),
+          createdAt:    new Date().toISOString(),
+          status:       'pending',
+          shopId:       shopId,
+        };
+        // Persist mock order to localStorage so action buttons reflect correctly
+        const orders = getAllOrders();
+        if (!orders.find(o => o.id === mockOrder.id)) {
+          orders.push(mockOrder);
+          saveAllOrders(orders);
+        }
+        onNewOrderFromDB(mockOrder);
+      }, 2000);
+    }
 
   } catch(e) { console.error('[Orders] Listener error:', e); }
 }
@@ -566,9 +849,9 @@ function alertNewOrder() {
 // ══════════════════════════════════════════════════════════════════
 
 function getUrgencyClass(order) {
-  const now       = Date.now();
-  const pickup    = new Date(order.pickupTime).getTime();
-  const created   = new Date(order.createdAt).getTime();
+  const now          = Date.now();
+  const pickup       = new Date(order.pickupTime).getTime();
+  const created      = new Date(order.createdAt).getTime();
   const minsToPickup = (pickup - now) / 60000;
   const minsOld      = (now - created) / 60000;
 
@@ -581,7 +864,7 @@ function buildOrderCard(order) {
   const urgency    = getUrgencyClass(order);
   const pickupDate = new Date(order.pickupTime);
   const createdAt  = new Date(order.createdAt);
-  const payLabel   = order.paymentType === 'upi' ? t('payment.upi') : t('payment.pickup');
+  const payLabel   = order.paymentType === 'upi' ? (t('payment.upi') || 'UPI') : (t('payment.pickup') || 'Pay at Pickup');
   const payClass   = order.paymentType === 'upi' ? 'upi' : 'cash';
   const preview    = (order.orderText || '').split('\n').slice(0, 2).join(', ');
 
@@ -599,13 +882,13 @@ function buildOrderCard(order) {
     </div>
     <div class="order-card-meta">
       <span class="payment-badge ${payClass}">${escHtml(payLabel)}</span>
-      <span class="pickup-eta">${t('order.readyBy')} ${fmtTime(pickupDate)}</span>
+      <span class="pickup-eta">${t('order.readyBy') || 'Ready by'} ${fmtTime(pickupDate)}</span>
     </div>
     <p class="order-preview">"${escHtml(preview)}…"</p>
     <div class="order-card-footer">
-      <span class="order-status-badge ${order.status}">${t('status.' + order.status)}</span>
-      <button class="btn-tap-manage" aria-label="${t('order.manage')} ${escHtml(order.id)}">
-        ${t('order.tapManage')} →
+      <span class="order-status-badge ${escHtml(order.status)}">${t('status.' + order.status) || order.status}</span>
+      <button class="btn-tap-manage" aria-label="${t('order.manage') || 'Manage'} ${escHtml(order.id)}">
+        ${t('order.tapManage') || 'Tap to Manage'} →
       </button>
     </div>
   `;
@@ -636,7 +919,7 @@ function updateOrderCardDOM(order) {
   const badge = existing.querySelector('.order-status-badge');
   if (badge) {
     badge.className = `order-status-badge ${order.status}`;
-    badge.textContent = t('status.' + order.status);
+    badge.textContent = t('status.' + order.status) || order.status;
   }
 }
 
@@ -662,8 +945,8 @@ function updateOrdersBadge() {
 }
 
 function updateStatsDisplay() {
-  if (DOM.statOrdersToday)  DOM.statOrdersToday.textContent  = shift.ordersCount;
-  if (DOM.statEarningsToday)DOM.statEarningsToday.textContent = fmtCurrency(shift.earnings);
+  if (DOM.statOrdersToday)   DOM.statOrdersToday.textContent   = shift.ordersCount;
+  if (DOM.statEarningsToday) DOM.statEarningsToday.textContent = fmtCurrency(shift.earnings);
   const avg = shift.readyTimes.length
     ? Math.round(shift.readyTimes.reduce((a,b)=>a+b,0) / shift.readyTimes.length / 60000) + ' min'
     : '—';
@@ -681,9 +964,9 @@ function openOrderPanel(orderId) {
 
   if (DOM.panelOrderId)    DOM.panelOrderId.textContent    = order.id;
   if (DOM.panelCustomerMeta) {
-    const pickup = new Date(order.pickupTime);
+    const pickup  = new Date(order.pickupTime);
     const created = new Date(order.createdAt);
-    DOM.panelCustomerMeta.textContent = `${order.customerName} · ${fmtTime(created)} · ${t('order.readyBy')} ${fmtTime(pickup)}`;
+    DOM.panelCustomerMeta.textContent = `${order.customerName} · ${fmtTime(created)} · ${t('order.readyBy') || 'Ready by'} ${fmtTime(pickup)}`;
   }
   if (DOM.panelOrderText)  DOM.panelOrderText.textContent  = order.orderText || '';
   if (DOM.panelPhotoWrap) {
@@ -696,8 +979,8 @@ function openOrderPanel(orderId) {
   }
   if (DOM.panelPaymentInfo) {
     DOM.panelPaymentInfo.textContent = order.paymentType === 'upi'
-      ? t('payment.upiPaid')
-      : t('payment.atPickup');
+      ? (t('payment.upiPaid') || 'Paid via UPI')
+      : (t('payment.atPickup') || 'Pay at Pickup');
   }
 
   if (DOM.billAmount) DOM.billAmount.value = order.billAmount || '';
@@ -720,12 +1003,20 @@ function closeOrderPanel() {
   activeOrder = null;
 }
 
+/**
+ * updatePanelButtons — shows the correct action button(s) for each status.
+ *
+ * Flow: pending → [Send Quote] → quoted → [Mark Packing] → packing → [Ready for Pickup]
+ * Cancel is available while order is not yet ready/cancelled.
+ */
 function updatePanelButtons(status) {
   if (DOM.btnSendQuote)   DOM.btnSendQuote.style.display   = status === 'pending' ? '' : 'none';
-  if (DOM.btnMarkPacking) DOM.btnMarkPacking.style.display  = status === 'quoted' ? '' : 'none';
+  if (DOM.btnMarkPacking) DOM.btnMarkPacking.style.display  = status === 'quoted'  ? '' : 'none';
   if (DOM.btnMarkReady)   DOM.btnMarkReady.style.display    = status === 'packing' ? '' : 'none';
   if (DOM.btnCancelOrder) DOM.btnCancelOrder.style.display  = ['pending','quoted','packing'].includes(status) ? '' : 'none';
 }
+
+// ── Send Quote ─────────────────────────────────────────────────────
 
 async function sendQuote() {
   if (!activeOrder) return;
@@ -733,17 +1024,24 @@ async function sendQuote() {
   const notes  = DOM.subNotes?.value.trim() || '';
 
   if (!amount || amount <= 0) {
-    showToast(t('panel.error.billRequired'), 'error'); return;
+    showToast(t('panel.error.billRequired') || 'Enter bill amount before sending quote.', 'error');
+    DOM.billAmount?.focus();
+    return;
   }
 
   try {
-    DB.updateOrderStatus(activeOrder.id, 'quoted', { billAmount: amount, notes });
-    DB.notifyCustomerQuoted(activeOrder.id, amount, notes);
+    // Update localStorage
+    const updated = updateOrderInStorage(activeOrder.id, { status: 'quoted', billAmount: amount, notes });
+
+    if (window.DB) {
+      DB.updateOrderStatus(activeOrder.id, 'quoted', { billAmount: amount, notes });
+      DB.notifyCustomerQuoted(activeOrder.id, amount, notes);
+    }
 
     activeOrder.status     = 'quoted';
     activeOrder.billAmount = amount;
     activeOrder.notes      = notes;
-    orderCache.set(activeOrder.id, activeOrder);
+    orderCache.set(activeOrder.id, { ...activeOrder });
 
     updateOrderCardDOM(activeOrder);
     updatePanelButtons('quoted');
@@ -751,61 +1049,86 @@ async function sendQuote() {
     shift.earnings += amount;
     updateStatsDisplay();
 
-    showToast(t('panel.quoteSent'), 'success');
+    showToast(t('panel.quoteSent') || 'Quote sent to customer!', 'success');
   } catch(e) {
-    showToast(t('panel.error.generic'), 'error');
+    console.error('[sendQuote]', e);
+    showToast(t('panel.error.generic') || 'Something went wrong.', 'error');
   }
 }
+
+// ── Mark Packing ───────────────────────────────────────────────────
 
 async function markPacking() {
   if (!activeOrder) return;
   try {
-    DB.updateOrderStatus(activeOrder.id, 'packing', {});
+    updateOrderInStorage(activeOrder.id, { status: 'packing' });
+
+    if (window.DB) DB.updateOrderStatus(activeOrder.id, 'packing', {});
+
     activeOrder.status = 'packing';
-    orderCache.set(activeOrder.id, activeOrder);
+    orderCache.set(activeOrder.id, { ...activeOrder });
     updateOrderCardDOM(activeOrder);
     updatePanelButtons('packing');
-    showToast(t('panel.packing'), 'success');
-  } catch(e) { showToast(t('panel.error.generic'), 'error'); }
+    showToast(t('panel.packing') || 'Order is being packed!', 'success');
+  } catch(e) {
+    console.error('[markPacking]', e);
+    showToast(t('panel.error.generic') || 'Something went wrong.', 'error');
+  }
 }
+
+// ── Mark Ready for Pickup ──────────────────────────────────────────
 
 async function markReady() {
   if (!activeOrder) return;
   try {
-    DB.updateOrderStatus(activeOrder.id, 'ready', {});
-    DB.notifyCustomerReady(activeOrder.id);
+    updateOrderInStorage(activeOrder.id, { status: 'ready', readyAt: new Date().toISOString() });
+
+    if (window.DB) {
+      DB.updateOrderStatus(activeOrder.id, 'ready', {});
+      DB.notifyCustomerReady(activeOrder.id);
+    }
 
     const createdAt = new Date(activeOrder.createdAt).getTime();
     shift.readyTimes.push(Date.now() - createdAt);
 
     activeOrder.status = 'ready';
-    orderCache.set(activeOrder.id, activeOrder);
+    orderCache.set(activeOrder.id, { ...activeOrder });
     updateOrderCardDOM(activeOrder);
     updatePanelButtons('ready');
     updateStatsDisplay();
 
     triggerConfetti();
-
-    showToast(t('panel.readyNotified'), 'success');
+    showToast(t('panel.readyNotified') || 'Customer notified — order is ready!', 'success');
     setTimeout(closeOrderPanel, 1500);
-  } catch(e) { showToast(t('panel.error.generic'), 'error'); }
+  } catch(e) {
+    console.error('[markReady]', e);
+    showToast(t('panel.error.generic') || 'Something went wrong.', 'error');
+  }
 }
+
+// ── Cancel Order ───────────────────────────────────────────────────
 
 function cancelOrderWithConfirm() {
   if (!activeOrder) return;
   showModal({
-    title:        t('cancel.title'),
-    body:         t('cancel.body'),
-    confirmLabel: t('cancel.confirm'),
-    cancelLabel:  t('cancel.dismiss'),
+    title:        t('cancel.title')   || 'Cancel Order?',
+    body:         t('cancel.body')    || 'This will notify the customer that their order is cancelled.',
+    confirmLabel: t('cancel.confirm') || 'Yes, Cancel',
+    cancelLabel:  t('cancel.dismiss') || 'Go Back',
     dangerous:    true,
     onConfirm: async () => {
       try {
-        DB.cancelOrder(activeOrder.id, 'shopkeeper_cancelled');
+        updateOrderInStorage(activeOrder.id, { status: 'cancelled', cancelledAt: new Date().toISOString() });
+
+        if (window.DB) DB.cancelOrder(activeOrder.id, 'shopkeeper_cancelled');
+
         removeOrderCard(activeOrder.id);
         closeOrderPanel();
-        showToast(t('cancel.done'), '');
-      } catch(e) { showToast(t('panel.error.generic'), 'error'); }
+        showToast(t('cancel.done') || 'Order cancelled.', '');
+      } catch(e) {
+        console.error('[cancelOrder]', e);
+        showToast(t('panel.error.generic') || 'Something went wrong.', 'error');
+      }
     }
   });
 }
@@ -813,16 +1136,13 @@ function cancelOrderWithConfirm() {
 // ══════════════════════════════════════════════════════════════════
 //  CONFETTI (CSS-ONLY)
 //
-//  FIX M3: triggerConfetti() already checks prefers-reduced-motion
-//  via matchMedia. The confetti-piece animation property is only
-//  applied when reduced-motion is NOT preferred, matching the
-//  @keyframes confetti-fall declaration in the media query block.
+//  FIX M3: triggerConfetti() checks prefers-reduced-motion via matchMedia.
 // ══════════════════════════════════════════════════════════════════
 
 function triggerConfetti() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-  const burst  = DOM.confettiBurst;
+  const burst = DOM.confettiBurst;
   if (!burst) return;
   burst.innerHTML = '';
 
@@ -832,13 +1152,13 @@ function triggerConfetti() {
     const piece = document.createElement('div');
     piece.className = 'confetti-piece';
     piece.style.cssText = `
-      left:             ${10 + Math.random() * 80}%;
-      top:              ${Math.random() * 20}%;
-      background:       ${colours[i % colours.length]};
-      border-radius:    ${Math.random() > 0.5 ? '50%' : '2px'};
-      width:            ${6 + Math.random() * 8}px;
-      height:           ${6 + Math.random() * 8}px;
-      animation:        confetti-fall ${0.8 + Math.random() * 0.8}s ease ${Math.random() * 0.3}s forwards;
+      left:          ${10 + Math.random() * 80}%;
+      top:           ${Math.random() * 20}%;
+      background:    ${colours[i % colours.length]};
+      border-radius: ${Math.random() > 0.5 ? '50%' : '2px'};
+      width:         ${6 + Math.random() * 8}px;
+      height:        ${6 + Math.random() * 8}px;
+      animation:     confetti-fall ${0.8 + Math.random() * 0.8}s ease ${Math.random() * 0.3}s forwards;
     `;
     burst.appendChild(piece);
   }
@@ -897,7 +1217,10 @@ function toggleOosItem(item, btn) {
 }
 
 function addOosItem(item) {
-  if (!item || item.length < 2) { showToast(t('oos.error.empty'), 'warn'); return; }
+  if (!item || item.length < 2) {
+    showToast(t('oos.error.empty') || 'Enter at least 2 characters.', 'warn');
+    return;
+  }
   oosItems.add(item);
   renderOosChips();
   if (DOM.oosCustomInput) DOM.oosCustomInput.value = '';
@@ -926,14 +1249,14 @@ function renderPanelOosChips() {
     chip.addEventListener('click', () => {
       const notesEl = DOM.subNotes;
       if (notesEl && notesEl.value.indexOf(item) === -1) {
-        notesEl.value += (notesEl.value ? '\n' : '') + `${item} — ${t('oos.notAvailable')}`;
+        notesEl.value += (notesEl.value ? '\n' : '') + `${item} — ${t('oos.notAvailable') || 'Not available'}`;
       }
     });
     container.appendChild(chip);
   });
 
   if (oosItems.size === 0) {
-    container.innerHTML = `<span style="font-size:12px;color:var(--color-muted)">${t('oos.none')}</span>`;
+    container.innerHTML = `<span style="font-size:12px;color:var(--color-muted)">${t('oos.none') || 'No out-of-stock items marked.'}</span>`;
   }
 }
 
@@ -981,26 +1304,39 @@ function initPullHint() {
 
 // ══════════════════════════════════════════════════════════════════
 //  WHATSAPP EXPORT
+//
+//  FIX: Builds a real shift summary from live shift data and opens
+//  https://wa.me/?text=ENCODED_MESSAGE (with shop phone if available).
 // ══════════════════════════════════════════════════════════════════
 
 function exportShiftToWhatsApp() {
   const cfg = getShopConfig();
+
   const avgReady = shift.readyTimes.length
     ? Math.round(shift.readyTimes.reduce((a,b)=>a+b,0) / shift.readyTimes.length / 60000) + ' min'
     : 'N/A';
 
-  const msg = encodeURIComponent(
+  const dateStr = new Date().toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day:     'numeric',
+    month:   'long',
+    year:    'numeric',
+  });
+
+  const message =
     `📊 *LocalBuy Shift Summary*\n` +
-    `🏪 ${cfg.shopName} · ${cfg.area}\n` +
-    `📅 ${new Date().toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long' })}\n\n` +
+    `🏪 ${cfg.shopName}${cfg.area ? ' · ' + cfg.area : ''}\n` +
+    `📅 ${dateStr}\n\n` +
     `✅ Orders completed: ${shift.ordersCount}\n` +
     `💰 Earnings: ${fmtCurrency(shift.earnings)}\n` +
     `⏱️ Avg. ready time: ${avgReady}\n\n` +
-    `Powered by LocalBuy — https://localbuy.in`
-  );
+    `Powered by LocalBuy — https://localbuy.in`;
 
-  const phone = cfg.phone ? `91${cfg.phone}` : '';
-  window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+  // wa.me/<number>?text=... if phone available, else just wa.me/?text=...
+  const phone = cfg.phone ? `91${cfg.phone.replace(/\D/g, '')}` : '';
+  const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1009,11 +1345,11 @@ function exportShiftToWhatsApp() {
 
 function escHtml(str) {
   return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replace(/&/g,  '&amp;')
+    .replace(/</g,  '&lt;')
+    .replace(/>/g,  '&gt;')
+    .replace(/"/g,  '&quot;')
+    .replace(/'/g,  '&#39;');
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1023,25 +1359,28 @@ function escHtml(str) {
 document.addEventListener('DOMContentLoaded', () => {
   cacheDOM();
 
+  // ── Attach event listeners ──────────────────────────────────────
+
   DOM.btnRegister?.addEventListener('click', handleRegistration);
   DOM.btnStartShift?.addEventListener('click', startShift);
   DOM.dashStatusToggle?.addEventListener('click', toggleShopStatus);
 
   DOM.btnEndShift?.addEventListener('click', () => {
     showModal({
-      title:        t('shiftEnd.confirmTitle'),
-      body:         t('shiftEnd.confirmBody'),
-      confirmLabel: t('shiftEnd.confirmBtn'),
-      cancelLabel:  t('modal.cancel'),
+      title:        t('shiftEnd.confirmTitle') || 'End Shift?',
+      body:         t('shiftEnd.confirmBody')  || 'Your shop will go offline and orders will stop.',
+      confirmLabel: t('shiftEnd.confirmBtn')   || 'End Shift',
+      cancelLabel:  t('modal.cancel')          || 'Cancel',
       dangerous:    true,
       onConfirm:    () => endShift(false),
     });
   });
 
-  DOM.tabOrders?.addEventListener('click', () => switchTab('orders'));
+  DOM.tabOrders?.addEventListener('click',    () => switchTab('orders'));
   DOM.tabInventory?.addEventListener('click', () => switchTab('inventory'));
 
-  DOM.shopkeeperAlert?.querySelector('.alert-dismiss')?.addEventListener('click', hideShopkeeperAlert);
+  DOM.shopkeeperAlert?.querySelector('.alert-dismiss')
+    ?.addEventListener('click', hideShopkeeperAlert);
 
   DOM.btnClosePanel?.addEventListener('click', closeOrderPanel);
   DOM.orderPanelOverlay?.addEventListener('click', e => {
@@ -1055,9 +1394,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  DOM.btnSendQuote?.addEventListener('click', sendQuote);
+  DOM.btnSendQuote?.addEventListener('click',   sendQuote);
   DOM.btnMarkPacking?.addEventListener('click', markPacking);
-  DOM.btnMarkReady?.addEventListener('click', markReady);
+  DOM.btnMarkReady?.addEventListener('click',   markReady);
   DOM.btnCancelOrder?.addEventListener('click', cancelOrderWithConfirm);
 
   DOM.btnClearOos?.addEventListener('click', clearAllOos);
@@ -1069,6 +1408,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   DOM.btnExportWA?.addEventListener('click', exportShiftToWhatsApp);
+
   DOM.btnNewShift?.addEventListener('click', () => {
     try { localStorage.removeItem('lb_shift_ended'); } catch(e) {}
     populateShiftStartScreen();
@@ -1079,9 +1419,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target === DOM.appModalOverlay) hideModal();
   });
 
-  initPullHint();
-  populateShiftStartScreen();
+  // Clear field errors on input (live feedback)
+  DOM.inputShopName?.addEventListener('input',  () => clearFieldError(DOM.errShopName,  DOM.inputShopName));
+  DOM.inputOwnerName?.addEventListener('input', () => clearFieldError(DOM.errOwnerName, DOM.inputOwnerName));
+  DOM.inputCategory?.addEventListener('change', () => clearFieldError(DOM.errCategory,  DOM.inputCategory));
+  DOM.inputArea?.addEventListener('input',      () => clearFieldError(DOM.errArea,      DOM.inputArea));
+  DOM.inputPhone?.addEventListener('input',     () => clearFieldError(DOM.errPhone,     DOM.inputPhone));
 
+  initPullHint();
+
+  // ── i18n ────────────────────────────────────────────────────────
   try {
     const lang = localStorage.getItem('lb_lang') || 'en';
     if (window.i18n && typeof window.i18n.setLang === 'function') {
@@ -1089,16 +1436,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   } catch(e) {}
 
-  // FIX H5: On beforeunload, clear the interval so it can't accumulate
-  // if the page is refreshed. The lb_shift_active flag stays 'true' so
-  // the inline boot script correctly resumes to 'dashboard' on reload,
-  // at which point startShift() will create a fresh single interval.
+  // ── FIX H5: beforeunload — clear interval, keep lb_shift_active ─
   window.addEventListener('beforeunload', () => {
     if (autoCloseInterval) {
       clearInterval(autoCloseInterval);
       autoCloseInterval = null;
     }
+    // lb_shift_active intentionally NOT cleared here —
+    // the boot script reads it to resume dashboard on reload.
   });
+
+  // ── Check for existing profile (skip registration if found) ─────
+  // This must run AFTER event listeners are attached.
+  const profileFound = checkExistingProfile();
+  if (!profileFound) {
+    populateShiftStartScreen(); // pre-fill any cached shift data
+  }
 
   console.log('[LocalBuy] shopkeeper.js loaded ✓');
 });

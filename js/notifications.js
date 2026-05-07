@@ -29,7 +29,14 @@ const VAPID_PUBLIC_KEY = 'YOUR_VAPID_PUBLIC_KEY_HERE';
 // ─── Audio state ─────────────────────────────────────────────────────────────
 let _audioElement = null;
 
-// Tracks whether the user has granted notification permission
+// ─── Autoplay gate (FIX A1) ──────────────────────────────────────────────────
+// Browser autoplay policy blocks audio that is not triggered by a user gesture.
+// _shiftStarted is set to true only when the shopkeeper clicks "Start Shift",
+// which constitutes the required user-gesture unlock for that browsing session.
+// Audio play calls are no-ops until this flag is true.
+let _shiftStarted = false;
+
+// Tracks the active push subscription
 let _pushSubscription = null;
 
 // ─── Toast queue (prevents toast stack overflow) ──────────────────────────────
@@ -54,6 +61,53 @@ function init(audioEl = null) {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', _handleSWMessage);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1a. SHIFT START / STOP  (FIX A1 — autoplay gate)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * startShift()
+ * Must be called inside a click handler for the "Start Shift" button.
+ * This satisfies browser autoplay policy by anchoring audio permission to a
+ * direct user gesture. Also pre-unlocks the HTML audio element if present.
+ *
+ * Usage (in your dashboard JS):
+ *   document.getElementById('btn-start-shift')
+ *     .addEventListener('click', () => Notifications.startShift());
+ */
+function startShift() {
+  _shiftStarted = true;
+
+  // Pre-unlock the HTMLAudioElement during the user gesture so that
+  // subsequent programmatic play() calls (on push / SW message) are allowed.
+  if (_audioElement) {
+    _audioElement.volume = 0;
+    _audioElement.play()
+      .then(() => {
+        _audioElement.pause();
+        _audioElement.currentTime = 0;
+        _audioElement.volume = 1;
+        console.log('[Notifications] Audio element pre-unlocked for autoplay.');
+      })
+      .catch(() => {
+        // Silently ignore — element may have no src yet; unlock still counts.
+        _audioElement.volume = 1;
+      });
+  }
+
+  console.log('[Notifications] Shift started — audio alerts enabled.');
+}
+
+/**
+ * stopShift()
+ * Revokes the audio gate when the shopkeeper ends their shift.
+ */
+function stopShift() {
+  _shiftStarted = false;
+  stopForegroundAlert();
+  console.log('[Notifications] Shift ended — audio alerts disabled.');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,16 +196,33 @@ async function unsubscribePush() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. FOREGROUND AUDIO ALERTS (shopkeeper dashboard)
+//    FIX A1 — gated behind _shiftStarted
+//    FIX A2 — Web Audio API fallback when MP3 returns 404
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * playForegroundAlert(sound)
+ *
+ * FIX A1: Returns immediately if _shiftStarted is false, enforcing the
+ *         user-gesture autoplay gate. Call startShift() first.
+ *
+ * FIX A2: Attaches a one-shot 'error' listener to the HTMLAudioElement.
+ *         If the browser fires an error (e.g. HTTP 404 on the MP3), the
+ *         listener fires _playWebAudioFallback() which synthesises a
+ *         two-tone beep entirely in-browser via the Web Audio API.
+ *         No external assets are required for the fallback.
+ *
+ * @param {'new-order'|'order-ready'} sound
+ */
 function playForegroundAlert(sound = 'new-order') {
-  if (!_audioElement) {
-    _audioElement = document.getElementById('audio-unlock');
+  // ── FIX A1 ──────────────────────────────────────────────────────────────
+  if (!_shiftStarted) {
+    console.warn('[Notifications] Audio blocked — shift not started. Call startShift() on user gesture.');
+    return;
   }
 
   if (!_audioElement) {
-    console.warn('[Notifications] Audio element not available. Was init() called?');
-    return;
+    _audioElement = document.getElementById('audio-unlock');
   }
 
   const srcMap = {
@@ -161,12 +232,93 @@ function playForegroundAlert(sound = 'new-order') {
 
   const src = srcMap[sound] || srcMap['new-order'];
 
-  _audioElement.src = src;
-  _audioElement.currentTime = 0;
+  // ── FIX A2 — attach fallback before setting src ──────────────────────────
+  if (_audioElement) {
+    // Remove any previous error listener to avoid duplicate handlers.
+    _audioElement.removeEventListener('error', _audioElement.__lbErrorHandler);
 
-  _audioElement.play().catch(err => {
-    console.warn('[Notifications] Audio play() blocked. Ensure shift-start pre-unlock ran:', err.message);
-  });
+    const fallbackTone = sound === 'order-ready' ? 'order-ready' : 'new-order';
+    _audioElement.__lbErrorHandler = function _onAudioError() {
+      console.warn('[Notifications] MP3 load failed — falling back to Web Audio API beep.');
+      _playWebAudioFallback(fallbackTone);
+    };
+    _audioElement.addEventListener('error', _audioElement.__lbErrorHandler, { once: true });
+
+    _audioElement.src = src;
+    _audioElement.currentTime = 0;
+
+    _audioElement.play().catch(err => {
+      console.warn('[Notifications] Audio play() blocked:', err.message);
+      // play() rejection is separate from a network/decode error.
+      // The 'error' event covers 404/decode; play() rejection (DOMException)
+      // is handled here as a secondary fallback.
+      _playWebAudioFallback(fallbackTone);
+    });
+
+  } else {
+    // No HTMLAudioElement available at all — go straight to Web Audio.
+    console.warn('[Notifications] No audio element found — using Web Audio API fallback.');
+    _playWebAudioFallback(sound);
+  }
+}
+
+/**
+ * _playWebAudioFallback(type)
+ * Synthesises a short alert tone via the Web Audio API.
+ * No network request, no external file — works entirely offline.
+ *
+ * Tone design:
+ *   'new-order'   → two ascending tones (440 Hz → 660 Hz), 0.18 s each
+ *   'order-ready' → three quick blips at 880 Hz, 0.1 s each
+ *
+ * @param {'new-order'|'order-ready'} type
+ */
+function _playWebAudioFallback(type = 'new-order') {
+  if (typeof AudioContext === 'undefined' && typeof webkitAudioContext === 'undefined') {
+    console.warn('[Notifications] Web Audio API not supported — silent fallback.');
+    return;
+  }
+
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  /**
+   * _beep(freq, startTime, duration, gain)
+   * Schedules a single sine-wave tone on the AudioContext timeline.
+   */
+  function _beep(freq, startTime, duration, gain = 0.5) {
+    const osc     = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    osc.type            = 'sine';
+    osc.frequency.value = freq;
+
+    gainNode.gain.setValueAtTime(gain, startTime);
+    // Short fade-out to avoid a click at tone end
+    gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+  }
+
+  const now = ctx.currentTime;
+
+  if (type === 'order-ready') {
+    // Three quick blips at 880 Hz
+    _beep(880, now,        0.10);
+    _beep(880, now + 0.15, 0.10);
+    _beep(880, now + 0.30, 0.10);
+  } else {
+    // Two ascending tones: 440 Hz then 660 Hz (new-order default)
+    _beep(440, now,        0.18);
+    _beep(660, now + 0.22, 0.18);
+  }
+
+  // Close the AudioContext after all tones finish to release resources.
+  const totalDuration = type === 'order-ready' ? 0.45 : 0.50;
+  setTimeout(() => ctx.close(), (totalDuration + 0.1) * 1000);
 }
 
 function stopForegroundAlert() {
@@ -411,6 +563,9 @@ const NOTIFICATION_PAYLOADS = {
    * newOrder — shopkeeper receives a new customer order
    *
    * FIX M7: Replaced self-referencing fallback with local variable fallback.
+   * The inner `payloads` object is fully defined before `payloads[lang]` is
+   * accessed, so there is no ReferenceError risk regardless of evaluation order.
+   *
    * @param {string} lang
    * @returns {{ title, body, actionLabel, tag }}
    */
@@ -441,6 +596,7 @@ const NOTIFICATION_PAYLOADS = {
         tag:         'lb-new-order'
       }
     };
+    // Safe fallback — payloads is fully constructed before this line runs.
     return payloads[lang] || payloads['en'];
   },
 
@@ -683,6 +839,8 @@ function _escapeHtml(str) {
 
 const Notifications = {
   init,
+  startShift,               // FIX A1 — call this on "Start Shift" button click
+  stopShift,                // FIX A1 — call this on "End Shift" button click
   requestPushPermission,
   unsubscribePush,
   playForegroundAlert,

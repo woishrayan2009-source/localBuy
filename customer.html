@@ -20,6 +20,9 @@
   <!-- PWA manifest -->
   <link rel="manifest" href="assets/manifest.json" />
 
+  <!-- FIX 1: qrcode.js CDN script tag added -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+
   <!-- ─── CRITICAL ABOVE-FOLD CSS (inlined, < 4KB) ─────────────────── -->
   <style>
     /* Design tokens — single source of truth */
@@ -80,6 +83,118 @@
     button:active, a:active {
       transform: scale(0.97);
       transition: transform 100ms ease;
+    }
+
+    /* ─── FIX 2 & 3: Policy / Contact modal styles ───────────────── */
+    .policy-modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(17, 24, 39, 0.55);
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .policy-modal-overlay.is-open {
+      display: flex;
+    }
+    .policy-modal-sheet {
+      background: #fff;
+      border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+      width: 100%;
+      max-width: 540px;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 24px 20px 40px;
+      position: relative;
+      animation: slideUp 260ms cubic-bezier(0.34, 1.1, 0.64, 1) both;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0); }
+    }
+    .policy-modal-handle {
+      width: 40px; height: 4px;
+      background: var(--color-border);
+      border-radius: 99px;
+      margin: 0 auto 20px;
+    }
+    .policy-modal-title {
+      font-family: 'Fraunces', serif;
+      font-size: 1.25rem;
+      color: var(--color-ink);
+      margin-bottom: 16px;
+    }
+    .policy-modal-body {
+      font-size: 0.875rem;
+      color: var(--color-muted);
+      line-height: 1.7;
+    }
+    .policy-modal-body p + p { margin-top: 12px; }
+    .policy-modal-close {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: none;
+      border: none;
+      font-size: 1.25rem;
+      color: var(--color-muted);
+      min-height: 44px;
+      min-width: 44px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+
+    /* ─── FIX 4: Reviews panel styles ───────────────────────────── */
+    .reviews-list {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .reviews-list[hidden] { display: none; }
+    .review-item {
+      background: var(--color-sage-pale);
+      border: 1px solid var(--color-sage-light);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+    }
+    .review-item-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .review-author {
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+    .review-stars {
+      color: var(--color-amber);
+      font-size: 0.8rem;
+    }
+    .review-text {
+      font-size: 0.8125rem;
+      color: var(--color-muted);
+    }
+    .reviews-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      border: none;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.875rem;
+      color: var(--color-sage);
+      font-weight: 600;
+      padding: 4px 0;
+      min-height: 44px;
+      cursor: pointer;
+    }
+    .reviews-toggle .chevron {
+      transition: transform 240ms ease;
+    }
+    .reviews-toggle[aria-expanded="true"] .chevron {
+      transform: rotate(180deg);
     }
   </style>
 
@@ -186,7 +301,7 @@
           <button class="chip" data-cat="bakery" aria-pressed="false">🎂 Bakery</button>
           <button class="chip" data-cat="dairy" aria-pressed="false">🥛 Dairy</button>
           <button class="chip" data-cat="beauty" aria-pressed="false">💄 Beauty</button>
-          <button class="chip" data-cat="fish" aria-pressed="false">🐟 Fish & Meat</button>
+          <button class="chip" data-cat="fish" aria-pressed="false">🐟 Fish &amp; Meat</button>
         </div>
       </div>
 
@@ -285,7 +400,8 @@
             <strong id="modal-rating-avg">4.8</strong>
             <span class="rating-count" id="modal-rating-count">· 23 ratings</span>
           </div>
-          <!-- Reviews accordion -->
+
+          <!-- FIX 4: "See reviews" now toggles an inline reviews panel -->
           <button
             class="reviews-toggle"
             id="reviews-toggle"
@@ -297,8 +413,31 @@
               <path d="M3.5 5.5l3.5 3.5 3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
           </button>
+
+          <!-- Inline reviews panel (toggled by button above) -->
           <div class="reviews-list" id="reviews-list" aria-hidden="true" hidden>
-            <!-- Reviews rendered by JS -->
+            <!-- FIX 4: Placeholder reviews rendered inline; replace with JS-rendered content as needed -->
+            <div class="review-item">
+              <div class="review-item-header">
+                <span class="review-author">Priya S.</span>
+                <span class="review-stars">★★★★★</span>
+              </div>
+              <p class="review-text">Very fresh stock, owner is very helpful. Walk-in was quick!</p>
+            </div>
+            <div class="review-item">
+              <div class="review-item-header">
+                <span class="review-author">Rahul B.</span>
+                <span class="review-stars">★★★★☆</span>
+              </div>
+              <p class="review-text">Good variety. Slightly crowded on weekends but service is prompt.</p>
+            </div>
+            <div class="review-item">
+              <div class="review-item-header">
+                <span class="review-author">Anjali M.</span>
+                <span class="review-stars">★★★★★</span>
+              </div>
+              <p class="review-text">Used the app to pre-order — everything was ready when I arrived. Love this!</p>
+            </div>
           </div>
         </div>
 
@@ -504,7 +643,7 @@ Maggi Noodles × 3"
             <path d="M12.5 15L7.5 10l5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
-        <span class="topbar-shop-name">Review & Pay</span>
+        <span class="topbar-shop-name">Review &amp; Pay</span>
         <span></span><!-- Spacer -->
       </div>
 
@@ -521,9 +660,23 @@ Maggi Noodles × 3"
         <div class="summary-items" id="summary-items-text">
           <!-- Filled by JS -->
         </div>
-        <!-- Photo preview in checkout -->
+        <!-- FIX 5: Photo preview in checkout — src is set via JS to the base64 data URL from photo-input -->
         <div class="summary-photo" id="summary-photo" style="display:none">
-          <img id="summary-photo-thumb" src="" alt="Your uploaded shopping list" loading="lazy" width="80" height="80" />
+          <!--
+            JS must set: document.getElementById('summary-photo-thumb').src = dataURL;
+            where dataURL is obtained from:
+              const reader = new FileReader();
+              reader.onload = e => { img.src = e.target.result; };
+              reader.readAsDataURL(file);
+          -->
+          <img
+            id="summary-photo-thumb"
+            src=""
+            alt="Your uploaded shopping list"
+            loading="lazy"
+            width="80"
+            height="80"
+          />
           <span class="summary-photo-label">📷 Photo list attached</span>
         </div>
       </div>
@@ -796,11 +949,6 @@ Maggi Noodles × 3"
   </main><!-- /main -->
 
   <!-- ─── CUSTOM CONFIRM DIALOG (replaces alert/confirm) ─────────────── -->
-  <!--
-    All confirmation dialogs use this modal.
-    aria-modal + role="alertdialog" for screen readers.
-    JS: showConfirmDialog(message, onConfirm, onCancel)
-  -->
   <div
     id="confirm-dialog"
     class="confirm-overlay"
@@ -821,7 +969,6 @@ Maggi Noodles × 3"
   </div>
 
   <!-- ─── TOAST NOTIFICATIONS ─────────────────────────────────────────── -->
-  <!-- Accessible live region for non-modal alerts -->
   <div
     id="toast-container"
     class="toast-container"
@@ -830,18 +977,53 @@ Maggi Noodles × 3"
     aria-atomic="false"
   ></div>
 
-  <!-- ─── SCRIPTS (deferred, at bottom for FCP performance) ───────────── -->
+  <!-- ─── FIX 2 & 3: Policy / Contact inline modal ─────────────────── -->
   <!--
-    Load order matters:
-    1. i18n.js    — string tables (no deps)
-    2. db-bridge.js — data layer stubs (no deps)
-    3. geo.js     — geolocation helpers
-    4. upi.js     — UPI deep-link builder
-    5. notifications.js — push + audio
-    6. app.js     — shared utilities (depends on above)
-    7. customer.js — customer hub logic (depends on all above)
-    8. sw-register.js — SW registration (last, non-blocking)
+    Shared bottom-sheet modal for Privacy Policy, Terms of Service,
+    and Contact. Opened by footer links via JS; never navigates to "#".
   -->
+  <div
+    id="policy-modal"
+    class="policy-modal-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="policy-modal-title"
+    style="display:none"
+  >
+    <div class="policy-modal-sheet">
+      <div class="policy-modal-handle" aria-hidden="true"></div>
+      <button class="policy-modal-close" id="policy-modal-close" aria-label="Close">✕</button>
+      <h2 class="policy-modal-title" id="policy-modal-title">Privacy Policy</h2>
+      <div class="policy-modal-body" id="policy-modal-body">
+        <!-- Content injected by openPolicyModal() -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── APP FOOTER with corrected links ──────────────────────────── -->
+  <footer style="padding: 24px 20px 40px; text-align: center; font-size: 0.8125rem; color: var(--color-muted);">
+    <nav aria-label="Footer links" style="display:flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+      <!-- FIX 2: Privacy and Terms open the inline policy modal -->
+      <button
+        class="footer-policy-link"
+        data-policy="privacy"
+        style="background:none; border:none; color:var(--color-muted); font-size:0.8125rem; font-family:inherit; cursor:pointer; min-height:44px; text-decoration:underline; text-underline-offset:2px;"
+      >Privacy Policy</button>
+      <button
+        class="footer-policy-link"
+        data-policy="terms"
+        style="background:none; border:none; color:var(--color-muted); font-size:0.8125rem; font-family:inherit; cursor:pointer; min-height:44px; text-decoration:underline; text-underline-offset:2px;"
+      >Terms of Service</button>
+      <!-- FIX 3: Contact opens mailto -->
+      <a
+        href="mailto:contact@localbuy.in"
+        style="color:var(--color-muted); text-decoration:underline; text-underline-offset:2px; display:inline-flex; align-items:center; min-height:44px;"
+      >Contact</a>
+    </nav>
+    <p style="margin-top:12px;">© 2025 LocalBuy. Made with ♥ in Guwahati.</p>
+  </footer>
+
+  <!-- ─── SCRIPTS (deferred, at bottom for FCP performance) ───────────── -->
   <script src="js/i18n.js" defer></script>
   <script src="js/db-bridge.js" defer></script>
   <script src="js/geo.js" defer></script>
@@ -850,6 +1032,155 @@ Maggi Noodles × 3"
   <script src="js/app.js" defer></script>
   <script src="js/customer.js" defer></script>
   <script src="js/sw-register.js" defer></script>
+
+  <!-- ─── INLINE FIXES SCRIPT ──────────────────────────────────────── -->
+  <!--
+    Handles:
+    FIX 2 — Privacy / Terms policy modal (openPolicyModal)
+    FIX 4 — "See reviews" inline toggle
+    FIX 5 — base64 photo src for checkout summary thumbnail
+  -->
+  <script>
+    /* ══════════════════════════════════════════════════
+       FIX 2: Policy modal open/close
+    ══════════════════════════════════════════════════ */
+    const POLICY_CONTENT = {
+      privacy: {
+        title: 'Privacy Policy',
+        body: `
+          <p><strong>Last updated: January 2025</strong></p>
+          <p>LocalBuy ("we", "our", "us") respects your privacy. This policy explains what data we collect and how we use it when you use our platform to browse and order from local shops in Guwahati.</p>
+          <p><strong>What we collect:</strong> We collect your order details (shopping list, pickup time), optional phone number for SMS notifications, and approximate location (only when you tap "Near me"). We do not sell your data.</p>
+          <p><strong>How we use it:</strong> Your order data is shared only with the shop you place an order with. Location data is used solely to sort shops by distance and is not stored.</p>
+          <p><strong>Cookies:</strong> We use localStorage to remember your past orders on this device. No cross-site tracking cookies are used.</p>
+          <p><strong>Your rights:</strong> You can clear your order history at any time by clearing your browser's site data. For any queries, email us at <a href="mailto:contact@localbuy.in" style="color:var(--color-sage)">contact@localbuy.in</a>.</p>
+        `
+      },
+      terms: {
+        title: 'Terms of Service',
+        body: `
+          <p><strong>Last updated: January 2025</strong></p>
+          <p>By using LocalBuy you agree to the following terms. Please read them carefully.</p>
+          <p><strong>Service:</strong> LocalBuy is a platform that connects customers with local shops in Guwahati for click-and-collect orders. We are not a retailer. All transactions are between you and the individual shopkeeper.</p>
+          <p><strong>Orders:</strong> Placing an order is a request, not a confirmed purchase. The shopkeeper may decline or modify your order. You are responsible for collecting your order within the agreed timeframe.</p>
+          <p><strong>Payments:</strong> "Pay at Pickup" transactions are settled directly with the shop. LocalBuy does not process payments on your behalf for pickup orders.</p>
+          <p><strong>Liability:</strong> LocalBuy is not liable for the quality, availability, or accuracy of products provided by shops. We recommend checking with the shop if you have specific requirements.</p>
+          <p><strong>Changes:</strong> We may update these terms from time to time. Continued use of the app constitutes acceptance of the updated terms.</p>
+        `
+      }
+    };
+
+    function openPolicyModal(type) {
+      const modal   = document.getElementById('policy-modal');
+      const title   = document.getElementById('policy-modal-title');
+      const body    = document.getElementById('policy-modal-body');
+      const content = POLICY_CONTENT[type];
+      if (!content) return;
+      title.textContent = content.title;
+      body.innerHTML    = content.body;
+      modal.style.display = 'flex';
+      modal.classList.add('is-open');
+      document.getElementById('policy-modal-close').focus();
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closePolicyModal() {
+      const modal = document.getElementById('policy-modal');
+      modal.style.display = 'none';
+      modal.classList.remove('is-open');
+      document.body.style.overflow = '';
+    }
+
+    // Wire footer policy buttons
+    document.querySelectorAll('.footer-policy-link').forEach(btn => {
+      btn.addEventListener('click', () => openPolicyModal(btn.dataset.policy));
+    });
+
+    // Close button
+    document.getElementById('policy-modal-close')
+      .addEventListener('click', closePolicyModal);
+
+    // Close on backdrop click
+    document.getElementById('policy-modal')
+      .addEventListener('click', function(e) {
+        if (e.target === this) closePolicyModal();
+      });
+
+    // Close on Escape
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closePolicyModal();
+    });
+
+    /* ══════════════════════════════════════════════════
+       FIX 4: "See reviews" inline toggle
+       (Falls back gracefully if customer.js also handles this)
+    ══════════════════════════════════════════════════ */
+    const reviewsToggle = document.getElementById('reviews-toggle');
+    const reviewsList   = document.getElementById('reviews-list');
+
+    if (reviewsToggle && reviewsList) {
+      reviewsToggle.addEventListener('click', function() {
+        const isExpanded = this.getAttribute('aria-expanded') === 'true';
+        const nextState  = !isExpanded;
+
+        this.setAttribute('aria-expanded', String(nextState));
+        reviewsList.setAttribute('aria-hidden', String(!nextState));
+
+        if (nextState) {
+          reviewsList.removeAttribute('hidden');
+          this.querySelector('span') && (this.querySelector('span').textContent = 'Hide reviews');
+        } else {
+          reviewsList.setAttribute('hidden', '');
+          this.querySelector('span') && (this.querySelector('span').textContent = 'See reviews');
+        }
+      });
+    }
+
+    /* ══════════════════════════════════════════════════
+       FIX 5: Propagate base64 photo src to checkout summary thumbnail.
+       Listens for file selection on #photo-input and mirrors
+       the data URL to both #photo-thumb (order section preview)
+       and #summary-photo-thumb (checkout summary).
+    ══════════════════════════════════════════════════ */
+    const photoInput       = document.getElementById('photo-input');
+    const photoThumb       = document.getElementById('photo-thumb');
+    const photoPreview     = document.getElementById('photo-preview');
+    const summaryPhoto     = document.getElementById('summary-photo');
+    const summaryPhotoThumb = document.getElementById('summary-photo-thumb');
+    const photoRemoveBtn   = document.getElementById('photo-remove-btn');
+
+    if (photoInput) {
+      photoInput.addEventListener('change', function() {
+        const file = this.files && this.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const dataURL = e.target.result;
+
+          // Show preview in order section
+          if (photoThumb)    photoThumb.src = dataURL;
+          if (photoPreview)  photoPreview.style.display = 'block';
+
+          // FIX 5: Mirror base64 src into checkout summary thumbnail
+          if (summaryPhotoThumb) summaryPhotoThumb.src = dataURL;
+          if (summaryPhoto)      summaryPhoto.style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // Remove photo — clears both previews
+    if (photoRemoveBtn) {
+      photoRemoveBtn.addEventListener('click', function() {
+        if (photoInput)        photoInput.value          = '';
+        if (photoThumb)        photoThumb.src            = '';
+        if (photoPreview)      photoPreview.style.display = 'none';
+        if (summaryPhotoThumb) summaryPhotoThumb.src      = '';
+        if (summaryPhoto)      summaryPhoto.style.display  = 'none';
+      });
+    }
+  </script>
 
 </body>
 </html>

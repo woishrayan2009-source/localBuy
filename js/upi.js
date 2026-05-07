@@ -19,90 +19,151 @@
 
 const UPI_APPS = [
   {
-    id:      'gpay',
-    name:    'GPay',
-    scheme:  'tez://',        // Google Pay deep link prefix
-    color:   '#4285F4',
-    emoji:   '🅖',
+    id:     'gpay',
+    name:   'GPay',
+    scheme: 'tez://',        // Google Pay deep link prefix
+    color:  '#4285F4',
+    emoji:  '🅖',
     // Android intent for Google Pay
-    intent:  (link) => link.replace('upi://', 'tez://upi/')
+    intent: (link) => link.replace('upi://', 'tez://upi/')
   },
   {
-    id:      'phonepe',
-    name:    'PhonePe',
-    scheme:  'phonepe://',
-    color:   '#5F259F',
-    emoji:   '🅟',
-    intent:  (link) => link.replace('upi://', 'phonepe://')
+    id:     'phonepe',
+    name:   'PhonePe',
+    scheme: 'phonepe://',
+    color:  '#5F259F',
+    emoji:  '🅟',
+    intent: (link) => link.replace('upi://', 'phonepe://')
   },
   {
-    id:      'paytm',
-    name:    'Paytm',
-    scheme:  'paytmmp://',
-    color:   '#00BAF2',
-    emoji:   '🅟',
-    intent:  (link) => link.replace('upi://', 'paytmmp://')
+    id:     'paytm',
+    name:   'Paytm',
+    scheme: 'paytmmp://',
+    color:  '#00BAF2',
+    emoji:  '🅟',
+    intent: (link) => link.replace('upi://', 'paytmmp://')
   },
   {
-    id:      'bhim',
-    name:    'BHIM',
-    scheme:  'upi://',
-    color:   '#002970',
-    emoji:   '🇮🇳',
-    intent:  (link) => link   // BHIM uses standard upi:// scheme
+    id:     'bhim',
+    name:   'BHIM',
+    scheme: 'upi://',
+    color:  '#002970',
+    emoji:  '🇮🇳',
+    intent: (link) => link   // BHIM uses standard upi:// scheme
   },
   {
-    id:      'other',
-    name:    'Other UPI',
-    scheme:  'upi://',
-    color:   '#0f5c3a',
-    emoji:   '💳',
-    intent:  (link) => link
+    id:     'other',
+    name:   'Other UPI',
+    scheme: 'upi://',
+    color:  '#0f5c3a',
+    emoji:  '💳',
+    intent: (link) => link
   }
 ];
+
+/* ─── Placeholder VPA guard ───────────────────────────────────────────────── */
+
+/**
+ * Known placeholder / demo VPA patterns that must never be sent to a real app.
+ * Add any other test addresses your backend uses.
+ */
+const PLACEHOLDER_VPA_PATTERNS = [
+  /^demo@/i,
+  /^test@/i,
+  /^example@/i,
+  /^placeholder@/i,
+  /^merchant@yourupi/i,
+  /^$/ // empty string
+];
+
+/**
+ * Returns true when the VPA looks like a real address.
+ * A valid VPA must be "localpart@psp" — non-empty on both sides of "@".
+ * @param {string} vpa
+ * @returns {boolean}
+ */
+function isValidVPA(vpa) {
+  if (!vpa || typeof vpa !== 'string') return false;
+  if (PLACEHOLDER_VPA_PATTERNS.some(re => re.test(vpa.trim()))) return false;
+  // Basic structural check: contains exactly one "@" with non-empty parts
+  const parts = vpa.trim().split('@');
+  return parts.length === 2 && parts[0].length > 0 && parts[1].length > 0;
+}
 
 /* ─── Core link builder ───────────────────────────────────────────────────── */
 
 /**
  * Build a standard UPI deep-link string.
+ *
+ * Generates: upi://pay?pa={vpa}&pn={name}&am={amount}&cu=INR&tn={note}
+ *
  * @param {{ pa: string, pn: string, am: number|string, tn: string, cu?: string }} params
  * @returns {string} UPI intent URL
  *
  * TODO: In production, fetch signed payment URL from backend:
- *   const res = await fetch('/api/upi/intent', { method: 'POST', body: JSON.stringify({ orderId, amount }) });
+ *   const res = await fetch('/api/upi/intent', {
+ *     method: 'POST',
+ *     body: JSON.stringify({ orderId, amount })
+ *   });
  *   const { upiUrl } = await res.json();
  *   return upiUrl;
  */
 function buildUPILink({ pa, pn, am, tn, cu = 'INR' }) {
+  if (!isValidVPA(pa)) {
+    throw new Error(
+      `[UPI] Invalid or placeholder VPA: "${pa}". ` +
+      'Resolve a real VPA server-side before building a payment link.'
+    );
+  }
+
+  // URLSearchParams encodes spaces as "+" — UPI spec expects "%20", so
+  // we convert after building the string.
   const params = new URLSearchParams({
-    pa: pa,                     // payee address (VPA)
-    pn: pn,                     // payee name
-    am: Number(am).toFixed(2),  // amount — always 2 decimal places
-    tn: tn,                     // transaction note
-    cu: cu                      // currency
+    pa: pa.trim(),
+    pn: pn,
+    am: Number(am).toFixed(2),  // always 2 decimal places
+    cu: cu,
+    tn: tn
   });
-  return `upi://pay?${params.toString()}`;
+
+  return `upi://pay?${params.toString().replace(/\+/g, '%20')}`;
 }
 
 /* ─── App launcher ────────────────────────────────────────────────────────── */
 
 /**
  * Attempt to launch a UPI app via deep link.
- * Falls back to QR modal if the app is not installed.
+ * Falls back to QR modal if the app is not installed or the redirect fails.
  *
- * @param {string} upiLink — the upi:// deep link
- * @param {string} appId   — which app to try (from UPI_APPS)
+ * Guards against placeholder VPAs before any navigation occurs.
+ *
+ * @param {string} upiLink — a fully built upi://pay?... deep link
+ * @param {string} [appId] — which app to try (id from UPI_APPS)
  */
 function launchUPI(upiLink, appId = 'other') {
+  // ── Guard: reject placeholder / malformed VPAs ──────────────────────────
+  let pa = '';
+  try {
+    // upiLink is "upi://pay?pa=...&..." — treat the query part as a URL to parse
+    const queryString = upiLink.replace(/^upi:\/\/pay\?/, '');
+    pa = new URLSearchParams(queryString).get('pa') || '';
+  } catch (_) { /* ignore parse errors; isValidVPA('') will catch it */ }
+
+  if (!isValidVPA(pa)) {
+    console.error(`[UPI] launchUPI blocked — invalid or placeholder VPA: "${pa}"`);
+    showQRFallback(upiLink, appId); // show fallback so the user isn't stranded
+    return;
+  }
+
   const app    = UPI_APPS.find(a => a.id === appId) || UPI_APPS[4];
   const intent = app.intent(upiLink);
 
   const start  = Date.now();
 
-  // On Android, this will switch to the UPI app if installed
+  // On Android this will hand off to the UPI app if installed.
   window.location.href = intent;
 
-  // If the user is still on the page after 1.5s the app wasn't found
+  // If the user is still on the page after 1.5 s the app wasn't found.
   setTimeout(() => {
     if (Date.now() - start < 2000) {
       showQRFallback(upiLink, appId);
@@ -113,18 +174,74 @@ function launchUPI(upiLink, appId = 'other') {
   if (window.DB) window.DB.logEvent('upi_launch_attempt', { appId });
 }
 
+/* ─── Order-status helper ─────────────────────────────────────────────────── */
+
+/**
+ * Advance the current order to "payment_claimed" status.
+ *
+ * TODO: Replace with a real backend call, e.g.:
+ *   await fetch('/api/orders/:id/status', {
+ *     method: 'PATCH',
+ *     body: JSON.stringify({ status: 'payment_claimed', upiRef: triggeredBy })
+ *   });
+ *
+ * The server-side webhook (from the UPI PSP) is the authoritative confirmation;
+ * this client call only marks the order as "pending verification".
+ *
+ * @param {{ upiLink: string, triggeredBy: string }} detail
+ */
+function advanceOrderStatus({ upiLink, triggeredBy }) {
+  // Dispatch a domain event that customer.js (or any other module) can handle.
+  document.dispatchEvent(
+    new CustomEvent('upi:paymentComplete', {
+      bubbles: true,
+      detail: {
+        status:      'payment_claimed', // NOT yet confirmed — awaiting webhook
+        upiLink,
+        triggeredBy,
+        timestamp:   Date.now()
+      }
+    })
+  );
+
+  // Optimistic UI: if your order-state machine is on window.OrderManager, call it.
+  if (window.OrderManager && typeof window.OrderManager.setStatus === 'function') {
+    window.OrderManager.setStatus('payment_claimed');
+  }
+
+  if (window.DB) {
+    window.DB.logEvent('upi_payment_claimed', { triggeredBy });
+  }
+}
+
 /* ─── QR fallback modal ───────────────────────────────────────────────────── */
 
 /**
- * Show a modal with the UPI link as a copyable string and a placeholder QR.
+ * Load qrcode.js from CDN once, then invoke a callback.
+ * Subsequent calls reuse the already-loaded script.
  *
- * TODO: Replace placeholder QR with real QR generation:
- *   import QRCode from 'qrcode'; // npm install qrcode (or CDN)
- *   const canvas = document.getElementById('upi-qr-canvas');
- *   await QRCode.toCanvas(canvas, upiLink, { width: 220, color: { dark: '#0f5c3a', light: '#f0faf4' } });
+ * CDN: https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js
+ * @param {() => void} cb
+ */
+function loadQRCodeLib(cb) {
+  if (window.QRCode) { cb(); return; }
+
+  const script = document.createElement('script');
+  script.src   = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  script.async = true;
+  script.onload  = cb;
+  script.onerror = () => {
+    console.warn('[UPI] qrcode.js failed to load — QR canvas will be empty.');
+    cb(); // still open the modal; the copy-link fallback remains usable
+  };
+  document.head.appendChild(script);
+}
+
+/**
+ * Show a modal with a real QR code (via qrcode.js) and a copyable UPI string.
  *
- * @param {string} upiLink
- * @param {string} [triggeredBy] — which app button was clicked (for analytics)
+ * @param {string} upiLink      — the upi://pay?... deep link to encode
+ * @param {string} [triggeredBy] — which app button was clicked (analytics only)
  */
 function showQRFallback(upiLink, triggeredBy = '') {
   // Remove existing modal if any
@@ -137,6 +254,9 @@ function showQRFallback(upiLink, triggeredBy = '') {
   modal.setAttribute('aria-modal', 'true');
   modal.setAttribute('aria-labelledby', 'upi-qr-title');
 
+  // Escape the upiLink for safe injection into the input value attribute
+  const safeLink = upiLink.replace(/"/g, '&quot;');
+
   modal.innerHTML = `
     <div class="upi-qr-backdrop"></div>
     <div class="upi-qr-sheet">
@@ -147,100 +267,15 @@ function showQRFallback(upiLink, triggeredBy = '') {
 
       <p class="upi-qr-sub">Scan this QR with any UPI app on your phone</p>
 
-      <!-- QR placeholder: replace with <canvas id="upi-qr-canvas"> when qrcode.js is available -->
-      <div class="upi-qr-placeholder" aria-label="QR code placeholder">
-        <svg viewBox="0 0 100 100" width="200" height="200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <!-- Finder patterns (corners) -->
-          <rect x="5"  y="5"  width="30" height="30" rx="3" fill="none" stroke="var(--color-sage)" stroke-width="3"/>
-          <rect x="10" y="10" width="20" height="20" rx="2" fill="none" stroke="var(--color-sage)" stroke-width="2"/>
-          <rect x="14" y="14" width="12" height="12" rx="1" fill="var(--color-sage)"/>
-
-          <rect x="65" y="5"  width="30" height="30" rx="3" fill="none" stroke="var(--color-sage)" stroke-width="3"/>
-          <rect x="70" y="10" width="20" height="20" rx="2" fill="none" stroke="var(--color-sage)" stroke-width="2"/>
-          <rect x="74" y="14" width="12" height="12" rx="1" fill="var(--color-sage)"/>
-
-          <rect x="5"  y="65" width="30" height="30" rx="3" fill="none" stroke="var(--color-sage)" stroke-width="3"/>
-          <rect x="10" y="70" width="20" height="20" rx="2" fill="none" stroke="var(--color-sage)" stroke-width="2"/>
-          <rect x="14" y="74" width="12" height="12" rx="1" fill="var(--color-sage)"/>
-
-          <!-- Data modules (decorative dots) -->
-          <g fill="var(--color-sage)" opacity="0.7">
-            <rect x="42" y="5"  width="4" height="4" rx="0.5"/>
-            <rect x="48" y="5"  width="4" height="4" rx="0.5"/>
-            <rect x="54" y="5"  width="4" height="4" rx="0.5"/>
-            <rect x="42" y="11" width="4" height="4" rx="0.5"/>
-            <rect x="54" y="11" width="4" height="4" rx="0.5"/>
-            <rect x="42" y="17" width="4" height="4" rx="0.5"/>
-            <rect x="48" y="17" width="4" height="4" rx="0.5"/>
-            <rect x="42" y="23" width="4" height="4" rx="0.5"/>
-            <rect x="54" y="23" width="4" height="4" rx="0.5"/>
-            <rect x="42" y="29" width="4" height="4" rx="0.5"/>
-            <rect x="48" y="29" width="4" height="4" rx="0.5"/>
-            <rect x="54" y="29" width="4" height="4" rx="0.5"/>
-            <!-- middle rows -->
-            <rect x="5"  y="42" width="4" height="4" rx="0.5"/>
-            <rect x="11" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="17" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="23" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="29" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="42" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="48" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="54" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="60" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="66" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="72" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="78" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="84" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="90" y="42" width="4" height="4" rx="0.5"/>
-            <rect x="5"  y="48" width="4" height="4" rx="0.5"/>
-            <rect x="17" y="48" width="4" height="4" rx="0.5"/>
-            <rect x="29" y="48" width="4" height="4" rx="0.5"/>
-            <rect x="42" y="48" width="4" height="4" rx="0.5"/>
-            <rect x="60" y="48" width="4" height="4" rx="0.5"/>
-            <rect x="72" y="48" width="4" height="4" rx="0.5"/>
-            <rect x="84" y="48" width="4" height="4" rx="0.5"/>
-            <rect x="5"  y="54" width="4" height="4" rx="0.5"/>
-            <rect x="11" y="54" width="4" height="4" rx="0.5"/>
-            <rect x="23" y="54" width="4" height="4" rx="0.5"/>
-            <rect x="29" y="54" width="4" height="4" rx="0.5"/>
-            <rect x="48" y="54" width="4" height="4" rx="0.5"/>
-            <rect x="54" y="54" width="4" height="4" rx="0.5"/>
-            <rect x="66" y="54" width="4" height="4" rx="0.5"/>
-            <rect x="78" y="54" width="4" height="4" rx="0.5"/>
-            <rect x="90" y="54" width="4" height="4" rx="0.5"/>
-            <!-- bottom rows -->
-            <rect x="42" y="66" width="4" height="4" rx="0.5"/>
-            <rect x="54" y="66" width="4" height="4" rx="0.5"/>
-            <rect x="60" y="66" width="4" height="4" rx="0.5"/>
-            <rect x="72" y="66" width="4" height="4" rx="0.5"/>
-            <rect x="84" y="66" width="4" height="4" rx="0.5"/>
-            <rect x="42" y="72" width="4" height="4" rx="0.5"/>
-            <rect x="48" y="72" width="4" height="4" rx="0.5"/>
-            <rect x="60" y="72" width="4" height="4" rx="0.5"/>
-            <rect x="66" y="72" width="4" height="4" rx="0.5"/>
-            <rect x="78" y="72" width="4" height="4" rx="0.5"/>
-            <rect x="90" y="72" width="4" height="4" rx="0.5"/>
-            <rect x="42" y="78" width="4" height="4" rx="0.5"/>
-            <rect x="54" y="78" width="4" height="4" rx="0.5"/>
-            <rect x="66" y="78" width="4" height="4" rx="0.5"/>
-            <rect x="84" y="78" width="4" height="4" rx="0.5"/>
-            <rect x="42" y="84" width="4" height="4" rx="0.5"/>
-            <rect x="48" y="84" width="4" height="4" rx="0.5"/>
-            <rect x="60" y="84" width="4" height="4" rx="0.5"/>
-            <rect x="72" y="84" width="4" height="4" rx="0.5"/>
-            <rect x="90" y="84" width="4" height="4" rx="0.5"/>
-          </g>
-        </svg>
-        <p class="upi-qr-note">
-          <!-- TODO: Replace SVG placeholder with <canvas id="upi-qr-canvas"> + qrcode.js -->
-          Real QR generated after backend integration
-        </p>
+      <!-- qrcode.js renders a canvas + img inside this div -->
+      <div id="upi-qr-canvas-wrap" class="upi-qr-placeholder" aria-label="UPI QR code">
+        <p class="upi-qr-loading">Generating QR…</p>
       </div>
 
       <div class="upi-link-copy">
         <label for="upi-link-input">Or copy UPI string manually</label>
         <div class="upi-link-row">
-          <input id="upi-link-input" type="text" readonly value="${upiLink}" />
+          <input id="upi-link-input" type="text" readonly value="${safeLink}" />
           <button id="upi-copy-btn" class="btn-copy">Copy</button>
         </div>
       </div>
@@ -249,7 +284,6 @@ function showQRFallback(upiLink, triggeredBy = '') {
         Once payment is done, tap <strong>Back</strong> to confirm your order.
       </p>
 
-      <!-- TODO: Verify payment status via backend webhook — do not trust client-side confirmation -->
       <button class="btn-primary upi-paid-btn" id="upi-paid-btn">
         I've completed the payment
       </button>
@@ -259,7 +293,34 @@ function showQRFallback(upiLink, triggeredBy = '') {
   document.body.appendChild(modal);
   requestAnimationFrame(() => modal.classList.add('visible'));
 
-  // Close handlers
+  /* ── Render real QR via qrcode.js ─────────────────────────────────────── */
+  loadQRCodeLib(() => {
+    const wrap = document.getElementById('upi-qr-canvas-wrap');
+    if (!wrap) return; // modal was closed before lib loaded
+
+    // Remove the "Generating…" placeholder text
+    wrap.innerHTML = '';
+
+    if (window.QRCode) {
+      try {
+        new window.QRCode(wrap, {
+          text:          upiLink,
+          width:         220,
+          height:        220,
+          colorDark:     '#0f5c3a',
+          colorLight:    '#f0faf4',
+          correctLevel:  window.QRCode.CorrectLevel.M
+        });
+      } catch (err) {
+        console.error('[UPI] QRCode render failed:', err);
+        wrap.innerHTML = '<p class="upi-qr-note">QR unavailable — use the copy link below.</p>';
+      }
+    } else {
+      wrap.innerHTML = '<p class="upi-qr-note">QR unavailable — use the copy link below.</p>';
+    }
+  });
+
+  /* ── Close handlers ───────────────────────────────────────────────────── */
   const close = () => {
     modal.classList.remove('visible');
     setTimeout(() => modal.remove(), 300);
@@ -268,30 +329,31 @@ function showQRFallback(upiLink, triggeredBy = '') {
   modal.querySelector('.upi-qr-close').addEventListener('click', close);
   modal.querySelector('.upi-qr-backdrop').addEventListener('click', close);
 
-  // Copy button
+  /* ── Copy button ──────────────────────────────────────────────────────── */
   const copyBtn = modal.querySelector('#upi-copy-btn');
   copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(upiLink).then(() => {
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
-    }).catch(() => {
-      // Fallback for older browsers
-      const input = modal.querySelector('#upi-link-input');
-      input.select();
-      document.execCommand('copy');
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
-    });
+    navigator.clipboard.writeText(upiLink)
+      .then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+      })
+      .catch(() => {
+        // Fallback for older / restricted browsers
+        const input = modal.querySelector('#upi-link-input');
+        input.select();
+        document.execCommand('copy'); // eslint-disable-line no-restricted-globals
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+      });
   });
 
-  // "I've paid" button — fires payment-complete event for customer.js to handle
+  /* ── "I've paid" button ───────────────────────────────────────────────── */
   modal.querySelector('#upi-paid-btn').addEventListener('click', () => {
     close();
-    // TODO: Verify payment status via backend webhook before confirming order
-    document.dispatchEvent(new CustomEvent('upi:paymentComplete', {
-      detail: { upiLink, triggeredBy }
-    }));
-    if (window.DB) window.DB.logEvent('upi_payment_claimed', { triggeredBy });
+    // Advance order status and notify other modules via CustomEvent.
+    // NOTE: This is an optimistic update only.
+    //       The authoritative confirmation comes from the UPI PSP webhook.
+    advanceOrderStatus({ upiLink, triggeredBy });
   });
 }
 
@@ -300,7 +362,7 @@ function showQRFallback(upiLink, triggeredBy = '') {
 /**
  * Render the row of UPI app buttons inside a given container element.
  * @param {HTMLElement} container
- * @param {string} upiLink — the pre-built upi:// link
+ * @param {string} upiLink — a pre-built upi://pay?... link
  */
 function renderUPIAppButtons(container, upiLink) {
   container.innerHTML = '';
@@ -324,5 +386,7 @@ window.UPI = {
   launchUPI,
   showQRFallback,
   renderUPIAppButtons,
+  advanceOrderStatus,
+  isValidVPA,
   UPI_APPS
 };

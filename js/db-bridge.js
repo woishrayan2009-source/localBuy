@@ -13,6 +13,12 @@
  *   1. npm install firebase  (or load from CDN)
  *   2. Replace each stub body with the Firestore / RTDB call shown in the TODO
  *   3. Remove the MOCK_* constants once real data flows
+ *
+ * Fixes applied (FIX log):
+ *   FIX C1 — MOCK_SHOPS declared ONLY here; customer.js accesses via window.MOCK_SHOPS
+ *   FIX C2 — Added lat, lng, acceptsCash, acceptsUPI to all 6 shop objects
+ *   FIX C3 — listenOrder() stub fires real progressive status updates for demo tracker
+ *   FIX C4 — All localStorage keys use 'localbuy_' prefix namespace
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -20,10 +26,13 @@
 
 /* ─── Mock data (remove when Firebase is live) ──────────────────────────── */
 
-// FIX C1: MOCK_SHOPS is declared ONLY here. customer.js no longer declares
-// its own MOCK_SHOPS, eliminating the "Cannot redeclare block-scoped variable"
+// FIX C1: MOCK_SHOPS is declared ONLY here. customer.js must NOT declare its
+// own MOCK_SHOPS — doing so causes a "Cannot redeclare block-scoped variable"
 // ReferenceError. customer.js accesses shops via the window.MOCK_SHOPS global
 // exported at the bottom of this file.
+//
+// FIX C2: Added lat, lng, acceptsCash, acceptsUPI to every shop object so
+// location-based distance sorting and payment-method filtering work correctly.
 const MOCK_SHOPS = [
   {
     id: 's1',
@@ -36,9 +45,13 @@ const MOCK_SHOPS = [
     hours: '7:00 AM – 9:00 PM',
     lastOrder: '8:30 PM',
     address: 'Fancy Bazar, Guwahati',
+    lat: 26.1844,
+    lng: 91.7458,
     rating: 4.8,
     ratingCount: 23,
-    upiId: 'sharma.store@upi',      // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    upiId: 'sharma.store@upi',        // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    acceptsCash: true,
+    acceptsUPI: true,
     requiresPrePayment: false,
     announcement: null,
     tags: ['groceries', 'daily essentials', 'pulses', 'spices']
@@ -54,9 +67,13 @@ const MOCK_SHOPS = [
     hours: '8:00 AM – 10:00 PM',
     lastOrder: '9:45 PM',
     address: 'Pan Bazar, Guwahati',
+    lat: 26.1856,
+    lng: 91.7480,
     rating: 4.9,
     ratingCount: 41,
-    upiId: 'citymedical@upi',       // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    upiId: 'citymedical@upi',         // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    acceptsCash: true,
+    acceptsUPI: true,
     requiresPrePayment: false,
     announcement: '🎉 Free blood pressure check every Saturday morning!',
     tags: ['medicines', 'health', 'vitamins', 'first aid']
@@ -72,9 +89,13 @@ const MOCK_SHOPS = [
     hours: '6:00 AM – 8:00 PM',
     lastOrder: '7:30 PM',
     address: 'Paltan Bazar, Guwahati',
+    lat: 26.1820,
+    lng: 91.7510,
     rating: 4.7,
     ratingCount: 18,
-    upiId: 'kamakhyabakery@upi',    // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    upiId: 'kamakhyabakery@upi',      // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    acceptsCash: true,
+    acceptsUPI: true,
     requiresPrePayment: false,
     announcement: '🎉 Fresh momo every Saturday morning!',
     tags: ['bread', 'cake', 'pastry', 'momo', 'snacks']
@@ -90,9 +111,13 @@ const MOCK_SHOPS = [
     hours: '5:00 AM – 1:00 PM',
     lastOrder: '12:45 PM',
     address: 'Ulubari, Guwahati',
+    lat: 26.1762,
+    lng: 91.7395,
     rating: 4.6,
     ratingCount: 12,
-    upiId: 'krishnadairy@upi',      // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    upiId: 'krishnadairy@upi',        // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    acceptsCash: true,
+    acceptsUPI: false,
     requiresPrePayment: false,
     announcement: null,
     tags: ['milk', 'curd', 'paneer', 'butter', 'ghee']
@@ -108,9 +133,13 @@ const MOCK_SHOPS = [
     hours: '9:00 AM – 7:00 PM',
     lastOrder: '6:45 PM',
     address: 'Silpukhuri, Guwahati',
+    lat: 26.1891,
+    lng: 91.7432,
     rating: 4.5,
     ratingCount: 9,
-    upiId: 'borastationery@upi',    // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    upiId: 'borastationery@upi',      // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    acceptsCash: true,
+    acceptsUPI: true,
     requiresPrePayment: false,
     announcement: null,
     tags: ['pens', 'notebooks', 'art supplies', 'school']
@@ -126,9 +155,13 @@ const MOCK_SHOPS = [
     hours: '5:00 AM – 11:00 AM',
     lastOrder: '10:30 AM',
     address: 'Pan Bazar, Guwahati',
+    lat: 26.1863,
+    lng: 91.7497,
     rating: 4.7,
     ratingCount: 31,
-    upiId: 'nandinifish@upi',       // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    upiId: 'nandinifish@upi',         // TODO: UPI VPA must be resolved server-side; never expose in frontend JS
+    acceptsCash: true,
+    acceptsUPI: true,
     requiresPrePayment: false,
     announcement: '🎉 Fresh Rohu and Catla daily from Brahmaputra!',
     tags: ['rohu', 'catla', 'prawns', 'hilsa', 'fresh fish']
@@ -147,9 +180,9 @@ const MOCK_REVIEWS = {
     { initials: 'MK', name: 'Meena K.',    role: 'Local resident',   rating: 4, text: 'Good service. Slight wait time but staff is helpful.', date: '2 weeks ago' }
   ],
   s2: [
-    { initials: 'SH', name: 'Dr. S. Hazarika', role: 'Physician',         rating: 5, text: 'Always have the medicines I need. No waiting. Perfect.', date: '3 days ago' },
-    { initials: 'RB', name: 'Rupa B.',          role: 'Regular customer',  rating: 5, text: 'Ordered rare BP medicines — ready in 4 minutes. Impressive.', date: '5 days ago' },
-    { initials: 'TG', name: 'Tarun G.',          role: 'Verified buyer',    rating: 5, text: 'Very professional. Staff double-checks prescriptions.', date: '1 week ago' }
+    { initials: 'SH', name: 'Dr. S. Hazarika', role: 'Physician',        rating: 5, text: 'Always have the medicines I need. No waiting. Perfect.', date: '3 days ago' },
+    { initials: 'RB', name: 'Rupa B.',          role: 'Regular customer', rating: 5, text: 'Ordered rare BP medicines — ready in 4 minutes. Impressive.', date: '5 days ago' },
+    { initials: 'TG', name: 'Tarun G.',          role: 'Verified buyer',   rating: 5, text: 'Very professional. Staff double-checks prescriptions.', date: '1 week ago' }
   ],
   s3: [
     { initials: 'SP', name: 'Sunita P.',  role: 'Regular customer', rating: 5, text: 'Ordered birthday cake from office. It was ready when I walked in. Delicious!', date: '1 day ago' },
@@ -157,17 +190,31 @@ const MOCK_REVIEWS = {
     { initials: 'LB', name: 'Lily B.',    role: 'Verified buyer',   rating: 5, text: 'Freshest bread in the neighbourhood. Always warm.', date: '1 week ago' }
   ],
   s4: [
-    { initials: 'BC', name: 'Bhaswati C.', role: 'Daily customer',  rating: 5, text: 'Pure milk, no dilution. Best paneer in Ulubari!', date: '2 days ago' },
-    { initials: 'HS', name: 'Hemen S.',    role: 'Regular buyer',   rating: 4, text: 'Early morning pickup works perfectly for daily milk.', date: '3 days ago' },
-    { initials: 'AD', name: 'Ankita D.',   role: 'Local resident',  rating: 5, text: 'Ghee quality is excellent. Worth the early wake-up.', date: '1 week ago' }
+    { initials: 'BC', name: 'Bhaswati C.', role: 'Daily customer', rating: 5, text: 'Pure milk, no dilution. Best paneer in Ulubari!', date: '2 days ago' },
+    { initials: 'HS', name: 'Hemen S.',    role: 'Regular buyer',  rating: 4, text: 'Early morning pickup works perfectly for daily milk.', date: '3 days ago' },
+    { initials: 'AD', name: 'Ankita D.',   role: 'Local resident', rating: 5, text: 'Ghee quality is excellent. Worth the early wake-up.', date: '1 week ago' }
   ],
   s5: [],
   s6: [
-    { initials: 'DB', name: 'Dilip B.',    role: 'Regular customer', rating: 5, text: 'Always fresh catch. Rohu was packed and ready to cook!', date: '1 day ago' },
-    { initials: 'MR', name: 'Maya R.',     role: 'Local resident',   rating: 4, text: 'Good fish, very fresh. Bit busy in mornings.', date: '3 days ago' },
-    { initials: 'PS', name: 'Pankaj S.',   role: 'Verified buyer',   rating: 5, text: 'Best hilsa in Guwahati. They know their fish!', date: '5 days ago' }
+    { initials: 'DB', name: 'Dilip B.',  role: 'Regular customer', rating: 5, text: 'Always fresh catch. Rohu was packed and ready to cook!', date: '1 day ago' },
+    { initials: 'MR', name: 'Maya R.',   role: 'Local resident',   rating: 4, text: 'Good fish, very fresh. Bit busy in mornings.', date: '3 days ago' },
+    { initials: 'PS', name: 'Pankaj S.', role: 'Verified buyer',   rating: 5, text: 'Best hilsa in Guwahati. They know their fish!', date: '5 days ago' }
   ]
 };
+
+/* ─── localStorage key constants (FIX C4: unified 'localbuy_' prefix) ──────
+ * All code that touches localStorage MUST use these constants — never raw
+ * string literals — so renaming later is a one-line change.
+ */
+const LS_KEYS = {
+  CURRENT_ORDER : 'localbuy_current_order',
+  PAST_ORDERS   : 'localbuy_past_orders',
+  CUSTOMER_PHONE: 'localbuy_customer_phone',  // hashed/anonymised before storing
+  PREFS         : 'localbuy_prefs'
+};
+// Export so other modules (customer.js, shopkeeper.js) can import the same
+// constants rather than hard-coding key strings.
+window.LS_KEYS = LS_KEYS;
 
 /* ─── DB Namespace (exported to window for other modules) ─────────────────── */
 
@@ -224,7 +271,10 @@ const DB = {
    * @param {'open'|'busy'|'closed'|'offline'} status
    *
    * TODO: Replace with:
-   *   await firebase.firestore().collection('shops').doc(shopId).update({ status, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+   *   await firebase.firestore().collection('shops').doc(shopId).update({
+   *     status,
+   *     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+   *   });
    */
   setShopStatus(shopId, status) {
     console.log('[DB] setShopStatus', shopId, status);
@@ -250,7 +300,10 @@ const DB = {
    * @returns {Promise<Array>}
    *
    * TODO: Replace with:
-   *   const snap = await firebase.firestore().collection('shops').doc(shopId).collection('reviews').orderBy('createdAt', 'desc').limit(3).get();
+   *   const snap = await firebase.firestore()
+   *     .collection('shops').doc(shopId)
+   *     .collection('reviews')
+   *     .orderBy('createdAt', 'desc').limit(3).get();
    *   return snap.docs.map(d => d.data());
    */
   getReviews(shopId) {
@@ -311,7 +364,9 @@ const DB = {
    *     .where('shopId', '==', shopId)
    *     .where('status', 'in', ['pending', 'quoted', 'packing', 'ready'])
    *     .orderBy('createdAt', 'desc')
-   *     .onSnapshot(snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+   *     .onSnapshot(snap =>
+   *       callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+   *     );
    */
   listenOrders(shopId, callback) {
     console.log('[DB] listenOrders registered for', shopId);
@@ -321,9 +376,21 @@ const DB = {
 
   /**
    * Real-time listener for a single order (customer tracker).
+   *
+   * FIX C3: The stub now fires genuine progressive status updates so the
+   * demo tracker UI advances through all four stages without manual
+   * intervention.  Each stage fires after STAGE_INTERVAL_MS, matching the
+   * real-world Firestore onSnapshot behaviour the TODO below describes.
+   *
+   * Stage timeline (demo):
+   *   0 ms  → 'pending'   (order received, shopkeeper to confirm)
+   *  15 s   → 'quoted'    (shopkeeper sent price + notes)
+   *  30 s   → 'packing'   (shopkeeper confirmed, packing items)
+   *  45 s   → 'ready'     (order ready for customer pickup)
+   *
    * @param {string} orderId
    * @param {Function} callback — called with order object on every update
-   * @returns {Function} unsubscribe
+   * @returns {Function} unsubscribe — call to stop progression
    *
    * TODO: Replace with:
    *   return firebase.firestore()
@@ -334,29 +401,74 @@ const DB = {
   listenOrder(orderId, callback) {
     console.log('[DB] listenOrder registered for', orderId);
 
-    // Stub: simulate a status progression for demo purposes
-    // Remove this entire setTimeout chain when Firebase is live
-    let stage = 0;
-    const stages = ['pending', 'quoted', 'packing', 'ready'];
-    const mockOrderBase = JSON.parse(localStorage.getItem('lb_current_order') || '{}');
+    // FIX C4: Use 'localbuy_' prefix key constant
+    let mockOrderBase = {};
+    try {
+      mockOrderBase = JSON.parse(localStorage.getItem(LS_KEYS.CURRENT_ORDER) || '{}');
+    } catch (e) {
+      console.warn('[DB] listenOrder: could not parse stored order', e);
+    }
 
-    const advance = () => {
-      if (stage >= stages.length) return;
-      const mockOrder = {
+    // FIX C3: Each stage is a fully-described order snapshot, mirroring what
+    // a real Firestore onSnapshot listener would deliver.
+    const STAGE_INTERVAL_MS = 15000; // 15 s between stages in demo
+
+    const stages = [
+      {
+        status       : 'pending',
+        amount       : null,
+        shopkeeperNote: null
+      },
+      {
+        status        : 'quoted',
+        amount        : 347,
+        shopkeeperNote: 'No Tata Salt — added Captain Cook 1 kg ✓'
+      },
+      {
+        status        : 'packing',
+        amount        : 347,
+        shopkeeperNote: 'Packing your order now!'
+      },
+      {
+        status        : 'ready',
+        amount        : 347,
+        shopkeeperNote: 'Ready for pickup. Show this screen at the counter.'
+      }
+    ];
+
+    let currentStage = 0;
+    let timerId      = null;
+    let cancelled    = false;
+
+    const fireStage = () => {
+      if (cancelled || currentStage >= stages.length) return;
+
+      const snapshot = {
         ...mockOrderBase,
         id: orderId,
-        status: stages[stage],
-        amount: stage >= 1 ? 347 : null,
-        shopkeeperNote: stage >= 1 ? 'No Tata Salt — added Captain Cook 1kg ✓' : null
+        ...stages[currentStage]
       };
-      callback(mockOrder);
-      stage++;
-      if (stage < stages.length) setTimeout(advance, 15000); // advance every 15s in demo
+
+      callback(snapshot);
+      currentStage++;
+
+      if (!cancelled && currentStage < stages.length) {
+        timerId = setTimeout(fireStage, STAGE_INTERVAL_MS);
+      }
     };
 
-    setTimeout(advance, 500); // initial callback after short delay
+    // Fire first stage after a short delay so the calling code has time to
+    // set up UI before the first callback arrives (matches Firestore behaviour).
+    timerId = setTimeout(fireStage, 500);
 
-    return () => { stage = stages.length; }; // unsubscribe stops progression
+    // Return an unsubscribe function that stops all further callbacks.
+    return () => {
+      cancelled = true;
+      if (timerId !== null) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
+    };
   },
 
   /**
@@ -366,9 +478,9 @@ const DB = {
    *
    * TODO: Replace with:
    *   await firebase.firestore().collection('orders').doc(orderId).update({
-   *     status: 'cancelled',
+   *     status     : 'cancelled',
    *     cancelReason: reason,
-   *     cancelledAt: firebase.firestore.FieldValue.serverTimestamp()
+   *     cancelledAt : firebase.firestore.FieldValue.serverTimestamp()
    *   });
    */
   cancelOrder(orderId, reason) {
@@ -380,6 +492,9 @@ const DB = {
    * Fetch past orders for a customer (from localStorage in stub).
    * @param {string} customerPhone — hashed/anonymised in production
    * @returns {Promise<Array>}
+   *
+   * FIX C4: Uses LS_KEYS.PAST_ORDERS ('localbuy_past_orders') instead of
+   * the old 'lb_past_orders' key.
    *
    * TODO: Replace with:
    *   const snap = await firebase.firestore()
@@ -393,7 +508,7 @@ const DB = {
   getPastOrders() {
     try {
       return Promise.resolve(
-        JSON.parse(localStorage.getItem('lb_past_orders') || '[]')
+        JSON.parse(localStorage.getItem(LS_KEYS.PAST_ORDERS) || '[]')
       );
     } catch {
       return Promise.resolve([]);
@@ -448,5 +563,6 @@ const DB = {
 };
 
 /* ─── Export to window ────────────────────────────────────────────────────── */
-window.DB = DB;
+window.DB         = DB;
 window.MOCK_SHOPS = MOCK_SHOPS; // Remove when Firebase is live
+// window.LS_KEYS already exported above

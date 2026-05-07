@@ -5,39 +5,33 @@
  *   - Shop browsing, search, filter
  *   - Shop modal (bottom sheet)
  *   - Order interface (type list / photo upload / time slots)
- *   - Checkout (payment selection, UPI deep link)
- *   - Live order tracker (status polling, countdown)
+ *   - Checkout (payment selection, UPI deep link + QR, "I have paid")
+ *   - Live order tracker (status polling every 3s, countdown)
  *
  * Dependencies (load order in HTML):
  *   i18n.js → db-bridge.js → geo.js → upi.js → notifications.js → app.js → customer.js
+ *   qrcode.js (for UPI QR rendering)
  *
- * All Firebase calls are in db-bridge.js (DB object).
- * Replace DB.* stubs with real SDK calls there.
+ * FIXES APPLIED:
+ *   FIX C1: MOCK_SHOPS resolved via window.MOCK_SHOPS from db-bridge.js.
+ *   FIX C3: Geo.*, Notifications.*, UPI.* namespace usage.
+ *   FIX H1: Back-button target from SECTION_META.backTarget.
+ *   FIX H3: startOrderListener uses DB.listenOrder.
+ *   FIX H4: handleUPIAppSelect guards placeholder UPI VPA.
+ *   FIX L2: simulateOrderProgression clears demoTimer before re-running.
  *
- * FIX C1: MOCK_SHOPS removed from this file entirely. Now uses window.MOCK_SHOPS
- *         exported by db-bridge.js, avoiding the "Cannot redeclare block-scoped
- *         variable" ReferenceError when both files are loaded.
- *
- * FIX C3: All bare calls to getUserLocation / isInGuwahati replaced with
- *         Geo.getUserLocation / Geo.isInGuwahati. requestPushPermission
- *         replaced with Notifications.requestPushPermission. buildUPILink /
- *         launchUPI replaced with UPI.buildUPILink / UPI.launchUPI.
- *
- * FIX H1: Back-button wiring in navigate() now reads SECTION_META[sectionId].backTarget
- *         and the header back-btn click navigates to that target, not hardcoded 'browse'.
- *
- * FIX H3: startOrderListener now calls DB.listenOrder (single-order listener)
- *         instead of DB.listenOrders (shop-level listener).
- *
- * FIX H4: handleUPIAppSelect guards against placeholder UPI VPA before launching.
- *
- * FIX L2: simulateOrderProgression stores the interval ID and clears it before
- *         re-running, preventing double-timer accumulation on re-entry.
- *
- * STATE MODEL:
- *   currentShop   — selected shop object
- *   currentOrder  — in-progress order object (also persisted to localStorage)
- *   orderStatus   — current status from DB listener
+ *   NEW FIXES (per spec):
+ *   FIX N1: Shops render immediately on load — onEnterBrowse calls applyFilters(),
+ *            not just renderShopCards(MOCK_SHOPS), so cards appear without user interaction.
+ *   FIX N2: "Near Me" GPS uses navigator.geolocation.getCurrentPosition + Haversine sort;
+ *            shows inline notice if denied/unavailable.
+ *   FIX N3: Pay at Pickup is default selected; only disabled if shop.acceptsCash === false.
+ *   FIX N4: UPI flow builds real upi://pay?pa=... deep link via window.location.href;
+ *            QR rendered via QRCode.js; "I have paid" button advances the order.
+ *   FIX N5: handlePlaceOrder saves full order to localStorage under 'localbuy_orders' array.
+ *   FIX N6: Past orders panel reads from 'localbuy_orders' in localStorage.
+ *   FIX N7: Photo upload uses FileReader for base64 data URL; preview in checkout is correct.
+ *   FIX N8: 3-second polling interval syncs order status from shopkeeper page.
  */
 
 'use strict';
@@ -45,30 +39,22 @@
 /* ─── APP STATE ────────────────────────────────────────────────────── */
 
 const AppState = {
-  currentShop:    null,   // { id, name, emoji, category, ... }
-  currentOrder:   null,   // { id, shopId, text, photoDataUrl, pickupTime, payment, ... }
-  orderStatus:    null,   // 'pending' | 'quoted' | 'packing' | 'ready'
-  quoteAmount:    null,   // ₹ amount from shopkeeper
-  quoteNotes:     '',     // substitution notes from shopkeeper
-  selectedTime:   'asap', // 'asap' | ISO time string
+  currentShop:    null,
+  currentOrder:   null,
+  orderStatus:    null,
+  quoteAmount:    null,
+  quoteNotes:     '',
+  selectedTime:   'asap',
   activeSection:  'browse',
   activeCategory: 'all',
   searchQuery:    '',
-  isPreOrder:     false,  // pre-order for tomorrow
-  unsubscribeOrders: null // Firestore unsubscribe function
+  isPreOrder:     false,
+  unsubscribeOrders: null,
+  currentPhotoDataUrl: null,
+  _prefillOrderText: null
 };
 
-// FIX C1: Do NOT declare MOCK_SHOPS here. Use window.MOCK_SHOPS from db-bridge.js.
-// All references below use MOCK_SHOPS which resolves via the global from db-bridge.js.
-
-/* ─── SECTION NAVIGATION ────────────────────────────────────────────
-   Central navigate(sectionId) function.
-   Shows the target section, hides all others.
-   Updates header title and back button visibility.
-
-   FIX H1: backTarget is now read from SECTION_META and the header back-btn
-   click is bound once in initModalListeners() to navigate to the correct target.
-*/
+/* ─── SECTION NAVIGATION ─────────────────────────────────────────── */
 
 const SECTION_META = {
   browse:   { title: 'Browse Shops',   showBack: false, backTarget: null     },
@@ -77,31 +63,22 @@ const SECTION_META = {
   tracker:  { title: 'Order Status',   showBack: false, backTarget: null     }
 };
 
-/**
- * navigate(sectionId) — shows target section, hides all others.
- * @param {string} sectionId — one of: 'browse' | 'order' | 'checkout' | 'tracker'
- */
 function navigate(sectionId) {
-  // Hide all sections
   document.querySelectorAll('.app-section').forEach(el => {
     el.style.display = 'none';
     el.setAttribute('aria-hidden', 'true');
   });
 
-  // Show target section
   const target = document.getElementById('section-' + sectionId);
   if (!target) { console.warn('[navigate] Section not found:', sectionId); return; }
   target.style.display = 'block';
   target.removeAttribute('aria-hidden');
 
-  // Update header
   const meta = SECTION_META[sectionId] || {};
   const titleEl = document.getElementById('header-section-title');
   const backBtn = document.getElementById('header-back-btn');
   if (titleEl) titleEl.textContent = meta.title || '';
 
-  // FIX H1: Show/hide back button; store the current backTarget on the element
-  // so the single click handler (bound in initModalListeners) knows where to go.
   if (backBtn) {
     if (meta.showBack && meta.backTarget) {
       backBtn.style.display = 'flex';
@@ -113,42 +90,36 @@ function navigate(sectionId) {
   }
 
   AppState.activeSection = sectionId;
-
-  // Scroll to top of section
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  // Section-specific on-enter hooks
   if (sectionId === 'browse')   onEnterBrowse();
   if (sectionId === 'order')    onEnterOrder();
   if (sectionId === 'checkout') onEnterCheckout();
   if (sectionId === 'tracker')  onEnterTracker();
 }
 
-/* ─── SECTION: BROWSE ───────────────────────────────────────────────
-   On enter: render shop cards, init search, chips, GPS button.
-*/
+/* ─── SECTION: BROWSE ─────────────────────────────────────────────── */
 
+/**
+ * FIX N1: onEnterBrowse now calls applyFilters() (which reads AppState.activeCategory
+ * and AppState.searchQuery) instead of bare renderShopCards(MOCK_SHOPS).
+ * This guarantees cards appear immediately on page load with no user interaction.
+ */
 function onEnterBrowse() {
-  renderShopCards(MOCK_SHOPS);
   initSearch();
   initCategoryChips();
   initGPSButton();
+  applyFilters(); // FIX N1: render shops immediately
 }
 
-/**
- * renderShopCards(shops) — renders shop card HTML into #shop-grid.
- * Removes skeleton placeholders on first real render.
- * @param {Array} shops
- */
 function renderShopCards(shops) {
   const grid = document.getElementById('shop-grid');
   const emptyState = document.getElementById('empty-state');
   if (!grid) return;
 
-  // Remove skeleton cards
   grid.querySelectorAll('.skeleton').forEach(el => el.remove());
 
-  if (shops.length === 0) {
+  if (!shops || shops.length === 0) {
     grid.innerHTML = '';
     if (emptyState) emptyState.style.display = 'flex';
     return;
@@ -157,28 +128,18 @@ function renderShopCards(shops) {
 
   grid.innerHTML = shops.map(shop => buildShopCardHTML(shop)).join('');
 
-  // Add click handlers to each card
   grid.querySelectorAll('.shop-card').forEach(card => {
     card.addEventListener('click', () => {
       const shopId = card.dataset.shopId;
-      const shop = MOCK_SHOPS.find(s => s.id === shopId);
+      const shop = (window.MOCK_SHOPS || []).find(s => s.id === shopId);
       if (shop) openShopModal(shop);
     });
-    // Keyboard support
     card.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        card.click();
-      }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.click(); }
     });
   });
 }
 
-/**
- * buildShopCardHTML(shop) — returns HTML string for one shop card.
- * @param {object} shop
- * @returns {string} HTML
- */
 function buildShopCardHTML(shop) {
   const statusLabel = { open: 'Open', busy: 'Busy', closed: 'Closed' }[shop.status] || 'Unknown';
   return `
@@ -203,7 +164,7 @@ function buildShopCardHTML(shop) {
   `;
 }
 
-/* ── Search ────────────────────────────────────────────────────────── */
+/* ── Search ─────────────────────────────────────────────────────────── */
 
 let searchDebounceTimer = null;
 
@@ -212,7 +173,6 @@ function initSearch() {
   const clearBtn = document.getElementById('search-clear');
   if (!input) return;
 
-  // FIX L3: Suppress Safari's native search cancel button
   if (!document.getElementById('lb-search-webkit-style')) {
     const style = document.createElement('style');
     style.id = 'lb-search-webkit-style';
@@ -223,61 +183,65 @@ function initSearch() {
     document.head.appendChild(style);
   }
 
-  input.addEventListener('input', () => {
-    // Show/hide clear button
-    if (clearBtn) clearBtn.style.display = input.value ? 'flex' : 'none';
+  // Clone to remove any prior listeners
+  const newInput = input.cloneNode(true);
+  input.parentNode.replaceChild(newInput, input);
 
-    // Debounce search 300ms
+  newInput.addEventListener('input', () => {
+    if (clearBtn) clearBtn.style.display = newInput.value ? 'flex' : 'none';
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
-      AppState.searchQuery = input.value.trim().toLowerCase();
+      AppState.searchQuery = newInput.value.trim().toLowerCase();
       applyFilters();
     }, 300);
   });
 
   if (clearBtn) {
-    clearBtn.addEventListener('click', () => {
-      input.value = '';
-      clearBtn.style.display = 'none';
+    const newClearBtn = clearBtn.cloneNode(true);
+    clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
+    newClearBtn.addEventListener('click', () => {
+      newInput.value = '';
+      newClearBtn.style.display = 'none';
       AppState.searchQuery = '';
       applyFilters();
-      input.focus();
+      newInput.focus();
     });
   }
 }
 
-/* ── Category chips ────────────────────────────────────────────────── */
+/* ── Category chips ─────────────────────────────────────────────────── */
 
 function initCategoryChips() {
   const chips = document.querySelectorAll('#category-chips .chip');
   chips.forEach(chip => {
-    chip.addEventListener('click', () => {
-      // Update active chip
-      chips.forEach(c => {
+    // Clone to remove accumulated listeners
+    const newChip = chip.cloneNode(true);
+    chip.parentNode.replaceChild(newChip, chip);
+    newChip.addEventListener('click', () => {
+      document.querySelectorAll('#category-chips .chip').forEach(c => {
         c.classList.remove('chip-active');
         c.setAttribute('aria-pressed', 'false');
       });
-      chip.classList.add('chip-active');
-      chip.setAttribute('aria-pressed', 'true');
-
-      AppState.activeCategory = chip.dataset.cat;
+      newChip.classList.add('chip-active');
+      newChip.setAttribute('aria-pressed', 'true');
+      AppState.activeCategory = newChip.dataset.cat;
       applyFilters();
     });
   });
 }
 
 /**
- * applyFilters() — filters MOCK_SHOPS by active category + search query.
+ * applyFilters() — filters window.MOCK_SHOPS by active category + search query.
+ * FIX N1: Called directly from onEnterBrowse so shops appear on load.
  */
 function applyFilters() {
-  let filtered = [...MOCK_SHOPS];
+  const shops = window.MOCK_SHOPS || [];
+  let filtered = [...shops];
 
-  // Category filter
   if (AppState.activeCategory && AppState.activeCategory !== 'all') {
     filtered = filtered.filter(s => s.category === AppState.activeCategory);
   }
 
-  // Search filter (name match)
   if (AppState.searchQuery) {
     filtered = filtered.filter(s =>
       s.name.toLowerCase().includes(AppState.searchQuery) ||
@@ -288,52 +252,92 @@ function applyFilters() {
   renderShopCards(filtered);
 }
 
-/* ── GPS sort button ───────────────────────────────────────────────── */
+/* ── GPS / Near Me button ───────────────────────────────────────────── */
 
-// FIX C3: Use Geo.getUserLocation and Geo.isInGuwahati instead of bare calls.
+/**
+ * FIX N2: "Near Me" GPS uses navigator.geolocation.getCurrentPosition directly
+ * with Haversine distance sort. Shows inline notice if permission denied.
+ * Falls back to Geo.getUserLocation if available.
+ */
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function initGPSButton() {
   const btn = document.getElementById('gps-sort-btn');
   if (!btn) return;
 
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    btn.setAttribute('aria-label', 'Detecting your location…');
-    const label = btn.querySelector('.gps-btn-label');
+  // Clone to remove old listeners
+  const newBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(newBtn, btn);
+
+  newBtn.addEventListener('click', () => {
+    newBtn.disabled = true;
+    newBtn.setAttribute('aria-label', 'Detecting your location…');
+    const label = newBtn.querySelector('.gps-btn-label');
     if (label) label.textContent = 'Locating…';
 
-    try {
-      const loc = await Geo.getUserLocation();
-
-      if (Geo.isInGuwahati(loc)) {
-        showLocationBanner('📍 Showing shops nearest to you', 'success');
-        const sorted = [...MOCK_SHOPS].sort((a, b) =>
-          parseFloat(a.distance) - parseFloat(b.distance)
-        );
-        renderShopCards(sorted);
-        if (label) label.textContent = 'Near me ✓';
-      } else {
-        showLocationBanner('📍 Location not detected — showing all shops', 'info');
-        if (label) label.textContent = 'Near me';
-      }
-    } catch (err) {
-      showLocationBanner('📍 Could not detect location — showing all shops', 'info');
+    if (!navigator.geolocation) {
+      showLocationBanner('📍 Geolocation not supported by your browser.', 'info');
       if (label) label.textContent = 'Near me';
-    } finally {
-      btn.disabled = false;
-      btn.setAttribute('aria-label', 'Sort by my location');
+      newBtn.disabled = false;
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const userLat = pos.coords.latitude;
+        const userLon = pos.coords.longitude;
+        const shops = window.MOCK_SHOPS || [];
+
+        const sorted = [...shops].sort((a, b) => {
+          // Each shop should have lat/lon; fall back to parsing distance string
+          const distA = (a.lat && a.lon)
+            ? haversineDistance(userLat, userLon, a.lat, a.lon)
+            : parseFloat(a.distance) || 999;
+          const distB = (b.lat && b.lon)
+            ? haversineDistance(userLat, userLon, b.lat, b.lon)
+            : parseFloat(b.distance) || 999;
+          return distA - distB;
+        });
+
+        renderShopCards(sorted);
+        showLocationBanner('📍 Showing shops nearest to you', 'success');
+        if (label) label.textContent = 'Near me ✓';
+        newBtn.disabled = false;
+        newBtn.setAttribute('aria-label', 'Sort by my location');
+      },
+      (err) => {
+        let msg = '📍 Location access denied — showing all shops';
+        if (err.code === err.POSITION_UNAVAILABLE) msg = '📍 Location unavailable — showing all shops';
+        if (err.code === err.TIMEOUT)             msg = '📍 Location timed out — showing all shops';
+        showLocationBanner(msg, 'info');
+        if (label) label.textContent = 'Near me';
+        newBtn.disabled = false;
+        newBtn.setAttribute('aria-label', 'Sort by my location');
+      },
+      { timeout: 8000, maximumAge: 60000 }
+    );
   });
 
   // Reset filters button (inside empty state)
   const resetBtn = document.getElementById('reset-filters-btn');
   if (resetBtn) {
-    resetBtn.addEventListener('click', () => {
+    const newReset = resetBtn.cloneNode(true);
+    resetBtn.parentNode.replaceChild(newReset, resetBtn);
+    newReset.addEventListener('click', () => {
       AppState.activeCategory = 'all';
       AppState.searchQuery = '';
-      const input = document.getElementById('shop-search');
-      if (input) input.value = '';
-      const chips = document.querySelectorAll('#category-chips .chip');
-      chips.forEach(c => {
+      const searchInput = document.getElementById('shop-search');
+      if (searchInput) searchInput.value = '';
+      document.querySelectorAll('#category-chips .chip').forEach(c => {
         c.classList.remove('chip-active');
         c.setAttribute('aria-pressed', 'false');
       });
@@ -355,37 +359,20 @@ function showLocationBanner(text, type) {
   banner.style.display = 'flex';
 
   const closeBtn = banner.querySelector('.location-banner-close');
-  if (closeBtn) {
-    closeBtn.onclick = () => { banner.style.display = 'none'; };
-  }
-  // Auto-dismiss after 4s
+  if (closeBtn) closeBtn.onclick = () => { banner.style.display = 'none'; };
   setTimeout(() => { banner.style.display = 'none'; }, 4000);
 }
 
+/* ─── SECTION: SHOP MODAL ─────────────────────────────────────────── */
 
-/* ─── SECTION: SHOP MODAL ───────────────────────────────────────────
-   Full-screen bottom-sheet overlay showing shop details.
-   Status is computed dynamically vs current time.
-
-   FIX M2: The modal overlay now uses the .is-open / .active class pattern
-   defined in main.css instead of directly setting style.display.
-   This enables the CSS backdrop blur and slide-up transition.
-*/
-
-/**
- * openShopModal(shop) — populates and shows the shop modal.
- * @param {object} shop — shop data object from MOCK_SHOPS
- */
 function openShopModal(shop) {
   AppState.currentShop = shop;
 
-  // Populate header
   setElText('modal-shop-emoji', shop.emoji);
   setElText('modal-shop-name', shop.name);
   setElText('modal-category-badge', capitalize(shop.category));
 
-  // Announcement
-  const announcementEl = document.getElementById('modal-announcement');
+  const announcementEl   = document.getElementById('modal-announcement');
   const announcementText = document.getElementById('modal-announcement-text');
   if (shop.announcement && announcementEl && announcementText) {
     announcementText.textContent = shop.announcement;
@@ -394,45 +381,34 @@ function openShopModal(shop) {
     announcementEl.style.display = 'none';
   }
 
-  // Hours
   setElText('modal-hours', shop.hours);
   const lastOrderEl = document.getElementById('modal-last-order');
   if (lastOrderEl) lastOrderEl.innerHTML = `Last order accepted at <strong>${shop.lastOrder}</strong>`;
 
-  // Dynamic status
   renderModalStatus(shop);
 
-  // Ratings
   setElText('modal-rating-avg', shop.rating.toFixed(1));
   setElText('modal-rating-count', `· ${shop.ratingCount} ratings`);
   renderReviews(shop.reviews || []);
 
-  // FIX M2: Use .is-open + rAF .active pattern for CSS transitions.
   const overlay = document.getElementById('section-modal');
   if (overlay) {
     overlay.classList.add('is-open');
     overlay.removeAttribute('aria-hidden');
-    requestAnimationFrame(() => {
-      overlay.classList.add('active');
-    });
+    requestAnimationFrame(() => overlay.classList.add('active'));
     setTimeout(() => {
       const closeBtn = document.getElementById('modal-close-btn');
       if (closeBtn) closeBtn.focus();
     }, 100);
   }
 
-  // Prevent body scroll while modal is open
   document.body.style.overflow = 'hidden';
 }
 
-/**
- * closeShopModal() — hides the modal overlay with transition.
- */
 function closeShopModal() {
   const overlay = document.getElementById('section-modal');
   if (overlay) {
     overlay.classList.remove('active');
-    // Wait for transition before hiding
     overlay.addEventListener('transitionend', () => {
       overlay.classList.remove('is-open');
       overlay.setAttribute('aria-hidden', 'true');
@@ -441,38 +417,20 @@ function closeShopModal() {
   document.body.style.overflow = '';
 }
 
-/**
- * getShopStatus(shop) — computes display status based on current time vs closing buffer.
- *
- * FIX C2: This is the customer.js-local version. It intentionally uses
- * parseTimeToDate (local helper) and does NOT conflict with app.js LB.getShopStatus,
- * because this is a function-scoped declaration, not a global. app.js exports its
- * version under the LB namespace. No collision occurs.
- *
- * @param {object} shop
- * @returns {'open' | 'closing-soon' | 'post-buffer'}
- */
 function getShopStatus(shop) {
   try {
     const lastOrderDate = parseTimeToDate(shop.lastOrder);
     const now = new Date();
-
     if (shop.status === 'closed') return 'post-buffer';
     if (now > lastOrderDate) return 'post-buffer';
-
     const warnThreshold = new Date(lastOrderDate.getTime() - 30 * 60 * 1000);
     if (now >= warnThreshold) return 'closing-soon';
-
     return 'open';
   } catch (e) {
     return shop.status === 'open' ? 'open' : 'post-buffer';
   }
 }
 
-/**
- * renderModalStatus(shop) — injects the status-dependent CTA into #modal-status-block.
- * @param {object} shop
- */
 function renderModalStatus(shop) {
   const block = document.getElementById('modal-status-block');
   if (!block) return;
@@ -504,7 +462,6 @@ function renderModalStatus(shop) {
     });
 
   } else {
-    // post-buffer or closed
     block.innerHTML = `
       <div class="status-cta-closed-msg" role="status" aria-live="polite">
         🔴 Shop is closed for today
@@ -521,14 +478,7 @@ function renderModalStatus(shop) {
   }
 }
 
-/**
- * renderReviews(reviews) — renders review list inside accordion.
- *
- * FIX L5: Added inline CSS for review classes that are missing from customer.css.
- * @param {Array} reviews
- */
 function renderReviews(reviews) {
-  // FIX L5: Inject review styles if not already present
   if (!document.getElementById('lb-review-styles')) {
     const style = document.createElement('style');
     style.id = 'lb-review-styles';
@@ -566,15 +516,16 @@ function renderReviews(reviews) {
     </div>
   `).join('');
 
-  // Reviews toggle accordion
   const toggle = document.getElementById('reviews-toggle');
   if (toggle) {
-    toggle.onclick = () => {
-      const expanded = toggle.getAttribute('aria-expanded') === 'true';
-      toggle.setAttribute('aria-expanded', String(!expanded));
+    const newToggle = toggle.cloneNode(true);
+    toggle.parentNode.replaceChild(newToggle, toggle);
+    newToggle.onclick = () => {
+      const expanded = newToggle.getAttribute('aria-expanded') === 'true';
+      newToggle.setAttribute('aria-expanded', String(!expanded));
       list.hidden = expanded;
       list.setAttribute('aria-hidden', String(expanded));
-      const chevron = toggle.querySelector('.chevron');
+      const chevron = newToggle.querySelector('.chevron');
       if (chevron) chevron.style.transform = expanded ? '' : 'rotate(180deg)';
     };
   }
@@ -583,15 +534,12 @@ function renderReviews(reviews) {
 /* ── Modal event listeners ──────────────────────────────────────────── */
 
 function initModalListeners() {
-  // Close button
   const closeBtn = document.getElementById('modal-close-btn');
   if (closeBtn) closeBtn.addEventListener('click', closeShopModal);
 
-  // Backdrop tap
   const backdrop = document.getElementById('modal-backdrop');
   if (backdrop) backdrop.addEventListener('click', closeShopModal);
 
-  // Escape key
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       const overlay = document.getElementById('section-modal');
@@ -599,7 +547,7 @@ function initModalListeners() {
     }
   });
 
-  // FIX H1: Header back button — reads data-target set by navigate()
+  // FIX H1: Header back button reads data-target set by navigate()
   const headerBackBtn = document.getElementById('header-back-btn');
   if (headerBackBtn) {
     headerBackBtn.addEventListener('click', () => {
@@ -609,36 +557,28 @@ function initModalListeners() {
   }
 }
 
-
-/* ─── SECTION: ORDER ─────────────────────────────────────────────────
-   Two tabs: type list or upload photo.
-   Time slot picker. Order note. "Review Order" CTA.
-
-   FIX M4: ASAP button listener is removed before re-adding via cloneNode
-   to prevent accumulating duplicate listeners on re-entry.
-*/
+/* ─── SECTION: ORDER ─────────────────────────────────────────────── */
 
 function onEnterOrder() {
   const shop = AppState.currentShop;
   if (!shop) { navigate('browse'); return; }
 
-  // Update shop name in top bar
   setElText('order-shop-name', shop.name);
-
-  // Reset tabs to "Type" by default
   switchOrderTab('type');
-
-  // Init tabs
   initOrderTabs();
-
-  // Build time slots for this shop
   buildTimeSlots(shop);
-
-  // Character counter for textarea
   initCharCounter();
+  initPhotoUpload(); // FIX N7: proper FileReader-based photo upload
 
-  // Photo upload
-  initPhotoUpload();
+  // Apply prefill text from past orders (FIX N6)
+  if (AppState._prefillOrderText) {
+    const textarea = document.getElementById('order-text');
+    if (textarea) {
+      textarea.value = AppState._prefillOrderText;
+      textarea.dispatchEvent(new Event('input'));
+    }
+    AppState._prefillOrderText = null;
+  }
 
   // Clear button — clone to remove old listeners
   const clearBtn = document.getElementById('clear-order-btn');
@@ -662,14 +602,14 @@ function onEnterOrder() {
     });
   }
 
-  // Back buttons — clone to remove old listeners
+  // Back buttons — clone
   document.querySelectorAll('.back-btn[data-target="browse"]').forEach(btn => {
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
     newBtn.addEventListener('click', () => navigate('browse'));
   });
 
-  // Review order button — clone to remove old listeners
+  // Review order button — clone
   const reviewBtn = document.getElementById('review-order-btn');
   if (reviewBtn) {
     const newReviewBtn = reviewBtn.cloneNode(true);
@@ -677,19 +617,15 @@ function onEnterOrder() {
     newReviewBtn.addEventListener('click', handleReviewOrder);
   }
 
-  // Pre-order banner
-  if (AppState.isPreOrder) {
-    showToast('📅 Pre-ordering for tomorrow', 'info');
-  }
+  if (AppState.isPreOrder) showToast('📅 Pre-ordering for tomorrow', 'info');
 }
 
-/* ── Order tabs ────────────────────────────────────────────────────── */
+/* ── Order tabs ─────────────────────────────────────────────────────── */
 
 function initOrderTabs() {
   const tabType  = document.getElementById('tab-type');
   const tabPhoto = document.getElementById('tab-photo');
 
-  // Clone to remove old listeners accumulated from previous onEnterOrder calls
   if (tabType) {
     const newTabType = tabType.cloneNode(true);
     tabType.parentNode.replaceChild(newTabType, tabType);
@@ -703,27 +639,25 @@ function initOrderTabs() {
 }
 
 function switchOrderTab(tab) {
-  const tabType      = document.getElementById('tab-type');
-  const tabPhoto     = document.getElementById('tab-photo');
-  const panelType    = document.getElementById('tab-panel-type');
-  const panelPhoto   = document.getElementById('tab-panel-photo');
-
-  const isType = tab === 'type';
+  const tabType    = document.getElementById('tab-type');
+  const tabPhoto   = document.getElementById('tab-photo');
+  const panelType  = document.getElementById('tab-panel-type');
+  const panelPhoto = document.getElementById('tab-panel-photo');
+  const isType     = tab === 'type';
 
   if (tabType)  { tabType.classList.toggle('order-tab-active', isType);  tabType.setAttribute('aria-selected', String(isType)); }
   if (tabPhoto) { tabPhoto.classList.toggle('order-tab-active', !isType); tabPhoto.setAttribute('aria-selected', String(!isType)); }
-  if (panelType)  { panelType.hidden  = !isType; }
-  if (panelPhoto) { panelPhoto.hidden = isType;  }
+  if (panelType)  panelType.hidden  = !isType;
+  if (panelPhoto) panelPhoto.hidden = isType;
 }
 
-/* ── Character counter ─────────────────────────────────────────────── */
+/* ── Character counter ──────────────────────────────────────────────── */
 
 function initCharCounter() {
-  const textarea  = document.getElementById('order-text');
-  const countEl   = document.getElementById('char-count');
+  const textarea = document.getElementById('order-text');
+  const countEl  = document.getElementById('char-count');
   if (!textarea || !countEl) return;
 
-  // Clone to remove old listener
   const newTextarea = textarea.cloneNode(true);
   textarea.parentNode.replaceChild(newTextarea, textarea);
 
@@ -734,8 +668,13 @@ function initCharCounter() {
   });
 }
 
-/* ── Photo upload ──────────────────────────────────────────────────── */
+/* ── Photo upload — FIX N7 ──────────────────────────────────────────── */
 
+/**
+ * FIX N7: Photo upload uses FileReader to produce a base64 data URL.
+ * The data URL is stored in AppState.currentPhotoDataUrl and rendered
+ * as a preview both in the order section and in checkout summary.
+ */
 function initPhotoUpload() {
   const input     = document.getElementById('photo-input');
   const preview   = document.getElementById('photo-preview');
@@ -744,23 +683,32 @@ function initPhotoUpload() {
 
   if (!input) return;
 
-  // Clone input to remove old listeners
   const newInput = input.cloneNode(true);
   input.parentNode.replaceChild(newInput, input);
 
   newInput.addEventListener('change', () => {
-    const file = newInput.files[0];
+    const file = newInput.files && newInput.files[0];
     if (!file) return;
 
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      showToast('Please upload an image file.', 'warning');
+      return;
+    }
+
     const reader = new FileReader();
-    reader.onload = e => {
+    reader.onload = (e) => {
       const dataUrl = e.target.result;
       AppState.currentPhotoDataUrl = dataUrl;
 
-      if (thumb)   thumb.src = dataUrl;
+      if (thumb)   { thumb.src = dataUrl; thumb.alt = 'Order photo preview'; }
       if (preview) preview.style.display = 'flex';
 
       switchOrderTab('photo');
+      showToast('Photo attached ✓', 'success');
+    };
+    reader.onerror = () => {
+      showToast('Could not read the image file. Please try again.', 'error');
     };
     reader.readAsDataURL(file);
   });
@@ -778,27 +726,19 @@ function clearPhoto() {
   const preview = document.getElementById('photo-preview');
   const thumb   = document.getElementById('photo-thumb');
   if (input)   input.value = '';
-  if (thumb)   thumb.src = '';
+  if (thumb)   { thumb.src = ''; thumb.alt = ''; }
   if (preview) preview.style.display = 'none';
 }
 
-/* ── Time slots ────────────────────────────────────────────────────── */
+/* ── Time slots ─────────────────────────────────────────────────────── */
 
-/**
- * buildTimeSlots(shop) — generates pickup time buttons every 15 min.
- *
- * FIX M4: The ASAP button is cloned to clear accumulated click listeners
- * from previous calls to buildTimeSlots on re-entry to the order section.
- * @param {object} shop
- */
 function buildTimeSlots(shop) {
   const wrapper = document.getElementById('time-slots-wrapper');
   if (!wrapper) return;
 
-  // Clear old dynamic slots (keep ASAP)
   wrapper.querySelectorAll('.time-slot:not([data-time="asap"])').forEach(el => el.remove());
 
-  // FIX M4: Clone the ASAP button to remove any accumulated listeners
+  // FIX M4: Clone ASAP button to clear accumulated listeners
   const oldAsapBtn = wrapper.querySelector('[data-time="asap"]');
   let asapBtn = null;
   if (oldAsapBtn) {
@@ -807,19 +747,15 @@ function buildTimeSlots(shop) {
   }
 
   const now = new Date();
-  let cursor = new Date(now.getTime() + 20 * 60 * 1000); // start at now + 20min
-
-  // Round up to next 15-min boundary
+  let cursor = new Date(now.getTime() + 20 * 60 * 1000);
   const minuteRemainder = cursor.getMinutes() % 15;
   if (minuteRemainder !== 0) cursor.setMinutes(cursor.getMinutes() + (15 - minuteRemainder));
   cursor.setSeconds(0, 0);
 
-  // End at last order time
   let lastOrderDate;
   try { lastOrderDate = parseTimeToDate(shop.lastOrder); }
   catch { lastOrderDate = new Date(now.getTime() + 4 * 60 * 60 * 1000); }
 
-  // Build slots
   while (cursor <= lastOrderDate) {
     const slotTime = new Date(cursor);
     const label    = formatTime12(slotTime);
@@ -839,10 +775,9 @@ function buildTimeSlots(shop) {
     cursor = new Date(cursor.getTime() + 15 * 60 * 1000);
   }
 
-  // Wire ASAP button (freshly cloned)
   if (asapBtn) {
     asapBtn.addEventListener('click', () => selectTimeSlot(asapBtn, 'asap'));
-    selectTimeSlot(asapBtn, 'asap'); // default selection
+    selectTimeSlot(asapBtn, 'asap');
   }
 }
 
@@ -856,12 +791,12 @@ function selectTimeSlot(btn, time) {
   AppState.selectedTime = time;
 }
 
-/* ── Review order validation ───────────────────────────────────────── */
+/* ── Review order validation ────────────────────────────────────────── */
 
 function handleReviewOrder() {
-  const textarea = document.getElementById('order-text');
+  const textarea    = document.getElementById('order-text');
   const textContent = textarea ? textarea.value.trim() : '';
-  const hasPhoto = !!AppState.currentPhotoDataUrl;
+  const hasPhoto    = !!AppState.currentPhotoDataUrl;
 
   if (!textContent && !hasPhoto) {
     showToast('Please type your shopping list or upload a photo.', 'warning');
@@ -869,7 +804,6 @@ function handleReviewOrder() {
     return;
   }
 
-  // Save order draft to state
   AppState.currentOrder = {
     shopId:       AppState.currentShop.id,
     shopName:     AppState.currentShop.name,
@@ -886,17 +820,13 @@ function handleReviewOrder() {
   navigate('checkout');
 }
 
-
-/* ─── SECTION: CHECKOUT ──────────────────────────────────────────────
-   Order summary, payment method selection, UPI deep link, place order.
-*/
+/* ─── SECTION: CHECKOUT ──────────────────────────────────────────── */
 
 function onEnterCheckout() {
   const order = AppState.currentOrder;
   const shop  = AppState.currentShop;
   if (!order || !shop) { navigate('browse'); return; }
 
-  // Populate summary
   setElText('checkout-shop-emoji', shop.emoji);
   setElText('checkout-shop-name', shop.name);
   setElText('checkout-summary-meta',
@@ -905,31 +835,31 @@ function onEnterCheckout() {
       : `Walk in at ${formatTime12(new Date(order.pickupTime))}`
   );
 
-  // Items text
   const itemsEl = document.getElementById('summary-items-text');
   if (itemsEl) itemsEl.textContent = order.text || '(Photo list attached)';
 
-  // Photo in checkout
+  // FIX N7: Render photo preview in checkout summary
   const summaryPhoto = document.getElementById('summary-photo');
   const summaryThumb = document.getElementById('summary-photo-thumb');
   if (order.photoDataUrl && summaryPhoto && summaryThumb) {
     summaryThumb.src = order.photoDataUrl;
+    summaryThumb.alt = 'Attached order photo';
     summaryPhoto.style.display = 'flex';
   } else if (summaryPhoto) {
     summaryPhoto.style.display = 'none';
   }
 
-  // Payment options
+  // FIX N3: Pay at Pickup default + conditional disable
   initPaymentOptions(shop);
 
-  // Back button — clone to remove old listeners
+  // Back buttons — clone
   document.querySelectorAll('.back-btn[data-target="order"]').forEach(btn => {
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
     newBtn.addEventListener('click', () => navigate('order'));
   });
 
-  // Place order button — clone to remove old listeners
+  // Place order button — clone
   const placeBtn = document.getElementById('place-order-btn');
   if (placeBtn) {
     const newPlaceBtn = placeBtn.cloneNode(true);
@@ -937,83 +867,223 @@ function onEnterCheckout() {
     newPlaceBtn.addEventListener('click', handlePlaceOrder);
   }
 
-  // Past orders accordion
   initPastOrders();
 }
 
-/* ── Payment options ───────────────────────────────────────────────── */
+/* ── Payment options — FIX N3 + N4 ────────────────────────────────── */
 
+/**
+ * FIX N3: Pay at Pickup is selected by default.
+ * It is only disabled (with an overlay) if shop.acceptsCash === false.
+ * FIX N4: UPI flow launches real upi://pay deep link, renders QR via QRCode.js,
+ * and shows "I have paid" button to advance the order.
+ */
 function initPaymentOptions(shop) {
   const payPickup = document.getElementById('pay-pickup');
   const payUPI    = document.getElementById('pay-upi');
-  const upiApps   = document.getElementById('upi-apps');
-
+  const upiSection = document.getElementById('upi-apps');
   const pickupDisabledOverlay = document.getElementById('pickup-disabled-overlay');
-  if (pickupDisabledOverlay) pickupDisabledOverlay.style.display = 'none';
+
+  // FIX N3: default to Pay at Pickup unless shop.acceptsCash === false
+  const cashEnabled = shop.acceptsCash !== false;
 
   if (payPickup) {
-    payPickup.addEventListener('change', () => {
-      AppState.currentOrder.payment = 'pickup';
-      if (upiApps) upiApps.style.display = 'none';
-    });
+    if (!cashEnabled) {
+      payPickup.disabled = true;
+      if (pickupDisabledOverlay) pickupDisabledOverlay.style.display = 'flex';
+    } else {
+      payPickup.disabled = false;
+      if (pickupDisabledOverlay) pickupDisabledOverlay.style.display = 'none';
+      // Set default selection
+      payPickup.checked = true;
+      if (AppState.currentOrder) AppState.currentOrder.payment = 'pickup';
+      if (upiSection) upiSection.style.display = 'none';
+    }
+  }
+
+  // If cash disabled, auto-select UPI
+  if (!cashEnabled && payUPI) {
+    payUPI.checked = true;
+    if (AppState.currentOrder) AppState.currentOrder.payment = 'upi';
+    if (upiSection) upiSection.style.display = 'block';
+    buildUPISection(shop);
+  }
+
+  // Clone radio listeners to avoid accumulation
+  if (payPickup) {
+    const newPayPickup = payPickup.cloneNode(true);
+    payPickup.parentNode.replaceChild(newPayPickup, payPickup);
+    if (!cashEnabled) {
+      newPayPickup.disabled = true;
+    } else {
+      newPayPickup.checked = true;
+      newPayPickup.addEventListener('change', () => {
+        if (AppState.currentOrder) AppState.currentOrder.payment = 'pickup';
+        if (upiSection) upiSection.style.display = 'none';
+      });
+    }
   }
 
   if (payUPI) {
-    payUPI.addEventListener('change', () => {
-      AppState.currentOrder.payment = 'upi';
-      if (upiApps) upiApps.style.display = 'block';
+    const newPayUPI = payUPI.cloneNode(true);
+    payUPI.parentNode.replaceChild(newPayUPI, payUPI);
+    if (!cashEnabled) newPayUPI.checked = true;
+    newPayUPI.addEventListener('change', () => {
+      if (AppState.currentOrder) AppState.currentOrder.payment = 'upi';
+      if (upiSection) upiSection.style.display = 'block';
+      buildUPISection(shop);
     });
   }
 
-  // UPI app buttons
+  // UPI app buttons (existing pattern for app-specific deep links)
   document.querySelectorAll('.upi-app-btn').forEach(btn => {
-    btn.addEventListener('click', () => handleUPIAppSelect(btn.dataset.app, shop));
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.addEventListener('click', () => handleUPIAppSelect(newBtn.dataset.app, shop));
   });
 }
 
 /**
- * handleUPIAppSelect(app, shop) — builds UPI deep link and attempts to launch it.
- *
- * FIX H4: Guards against the placeholder UPI VPA string. If the shop.upiId
- * still contains the placeholder text, shows an error instead of launching
- * a deep link that would send money to a non-existent payee address.
- *
- * FIX C3: Uses UPI.buildUPILink and UPI.launchUPI from the UPI namespace.
- * @param {string} app
- * @param {object} shop
+ * buildUPISection(shop) — renders the UPI QR code and deep link button.
+ * FIX N4: Generates real upi://pay?pa=... URI, renders QR via QRCode.js.
+ */
+function buildUPISection(shop) {
+  const upiSection = document.getElementById('upi-apps');
+  if (!upiSection) return;
+
+  if (!shop.upiId || shop.upiId.includes('PLACEHOLDER') || shop.upiId.includes('SHOP_UPI_VPA')) {
+    upiSection.innerHTML = `
+      <p class="upi-unavailable-msg" style="color:var(--color-muted,#6b7280);font-size:13px;padding:8px 0;">
+        🚫 UPI payment not set up for this shop. Please pay at pickup.
+      </p>
+    `;
+    return;
+  }
+
+  const orderId   = AppState.currentOrder ? AppState.currentOrder.id || ('LB-' + Date.now()) : ('LB-' + Date.now());
+  const amount    = AppState.quoteAmount || 0;
+  const upiParams = new URLSearchParams({
+    pa: shop.upiId,
+    pn: encodeURIComponent(shop.name),
+    am: amount > 0 ? amount.toFixed(2) : '',
+    tn: encodeURIComponent('LocalBuy Order #' + orderId),
+    cu: 'INR'
+  });
+  const upiUri = 'upi://pay?' + upiParams.toString();
+
+  upiSection.innerHTML = `
+    <div id="upi-qr-container" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0;">
+      <div id="upi-qr-canvas" style="background:#fff;padding:8px;border-radius:8px;"></div>
+      <p style="font-size:12px;color:var(--color-muted,#6b7280);text-align:center;margin:0;">
+        Scan with any UPI app
+      </p>
+      <a
+        href="${upiUri}"
+        id="upi-open-app-btn"
+        class="upi-open-btn"
+        style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:var(--color-sage,#0f5c3a);color:#fff;border-radius:24px;font-size:14px;font-weight:600;text-decoration:none;"
+        aria-label="Open UPI app to pay"
+      >
+        💳 Open UPI App
+      </a>
+      <button
+        id="upi-paid-btn"
+        class="upi-paid-btn"
+        style="margin-top:4px;padding:10px 20px;background:transparent;border:2px solid var(--color-sage,#0f5c3a);color:var(--color-sage,#0f5c3a);border-radius:24px;font-size:14px;font-weight:600;cursor:pointer;"
+        aria-label="I have completed the UPI payment"
+      >
+        ✅ I Have Paid
+      </button>
+    </div>
+  `;
+
+  // Render QR code via QRCode.js (if library available)
+  const qrContainer = document.getElementById('upi-qr-canvas');
+  if (qrContainer && typeof QRCode !== 'undefined') {
+    new QRCode(qrContainer, {
+      text: upiUri,
+      width: 180,
+      height: 180,
+      colorDark: '#111827',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } else if (qrContainer) {
+    // Fallback: show the UPI URI as text if QRCode.js not loaded
+    qrContainer.innerHTML = `<code style="font-size:10px;word-break:break-all;max-width:200px;display:block;">${upiUri}</code>`;
+  }
+
+  // "Open UPI App" uses window.location.href for the deep link (FIX N4)
+  const openAppBtn = document.getElementById('upi-open-app-btn');
+  if (openAppBtn) {
+    openAppBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.location.href = upiUri;
+    });
+  }
+
+  // "I Have Paid" button — advances to order placed state
+  const paidBtn = document.getElementById('upi-paid-btn');
+  if (paidBtn) {
+    paidBtn.addEventListener('click', () => {
+      if (AppState.currentOrder) AppState.currentOrder.payment = 'upi_confirmed';
+      showToast('Payment noted! Placing your order…', 'success');
+      setTimeout(() => handlePlaceOrder(), 800);
+    });
+  }
+}
+
+/**
+ * handleUPIAppSelect — FIX H4: guards placeholder VPA; FIX N4: uses window.location.href.
  */
 function handleUPIAppSelect(app, shop) {
-  // FIX H4: Guard against placeholder VPA
   if (!shop.upiId || shop.upiId.includes('SHOP_UPI_VPA_RESOLVED_SERVER_SIDE') || shop.upiId.includes('PLACEHOLDER')) {
     showToast('Online payment is not set up for this shop yet. Please pay at pickup.', 'warning');
     return;
   }
 
-  const orderId = 'LB-' + Date.now();
-  const link    = UPI.buildUPILink({
+  const orderId = AppState.currentOrder ? AppState.currentOrder.id || ('LB-' + Date.now()) : ('LB-' + Date.now());
+  const upiParams = new URLSearchParams({
     pa: shop.upiId,
-    pn: shop.name,
-    am: 0,            // TODO: actual quoted amount from shopkeeper
-    tn: `LocalBuy Order #${orderId}`,
+    pn: encodeURIComponent(shop.name),
+    am: AppState.quoteAmount ? AppState.quoteAmount.toFixed(2) : '',
+    tn: encodeURIComponent('LocalBuy Order #' + orderId),
     cu: 'INR'
   });
 
-  // Show waiting spinner
+  const appPrefixes = {
+    gpay:    'tez://upi/pay?',
+    phonepe: 'phonepe://pay?',
+    paytm:   'paytmmp://pay?',
+    bhim:    'bhim://pay?'
+  };
+
+  const prefix = appPrefixes[app] || 'upi://pay?';
+  const deepLink = prefix + upiParams.toString();
+
+  // FIX N4: Use window.location.href for deep link
+  window.location.href = deepLink;
+
   const waiting = document.getElementById('upi-waiting');
   if (waiting) waiting.style.display = 'flex';
-
-  // FIX C3: Use UPI.launchUPI
-  UPI.launchUPI(link, app);
 }
 
-/* ── Place order ───────────────────────────────────────────────────── */
+/* ── Place order — FIX N5 ───────────────────────────────────────────── */
 
+/**
+ * FIX N5: handlePlaceOrder saves the full order object to localStorage
+ * under the 'localbuy_orders' array (not just 'lb_currentOrder').
+ */
 async function handlePlaceOrder() {
   const order = AppState.currentOrder;
   if (!order) return;
 
-  const selectedPayment = document.querySelector('.payment-radio:checked');
-  if (!selectedPayment) {
+  const selectedPaymentEl = document.querySelector('.payment-radio:checked');
+  const paymentMethod = selectedPaymentEl
+    ? selectedPaymentEl.value
+    : (order.payment || null);
+
+  if (!paymentMethod) {
     showToast('Please select a payment method to continue.', 'warning');
     return;
   }
@@ -1025,21 +1095,25 @@ async function handlePlaceOrder() {
   }
 
   try {
-    const orderId = 'LB' + Date.now();
-    order.id       = orderId;
-    order.payment  = selectedPayment.value;
-    order.status   = 'pending';
+    const orderId   = 'LB' + Date.now();
+    order.id        = orderId;
+    order.payment   = paymentMethod;
+    order.status    = 'pending';
+    order.updatedAt = new Date().toISOString();
 
-    // H7 NOTE: We intentionally omit photoDataUrl from localStorage to avoid
-    // exceeding the 5MB quota. The photo is held in AppState only.
-    const orderForStorage = Object.assign({}, order, { photoDataUrl: null });
-    localStorage.setItem('lb_currentOrder', JSON.stringify(orderForStorage));
+    // FIX N5: Save to 'localbuy_orders' array in localStorage
+    saveOrderToLocalStorage(order);
 
+    // Also persist current order reference (without large photo data)
+    const orderForRef = Object.assign({}, order, { photoDataUrl: null });
+    localStorage.setItem('lb_currentOrder', JSON.stringify(orderForRef));
+
+    // Legacy history (for backwards compat with initPastOrders)
     saveOrderToHistory(order);
 
     await DB.createOrder(order);
 
-    // FIX C3: Use Notifications.requestPushPermission
+    // FIX C3
     await Notifications.requestPushPermission();
 
     AppState.currentOrder = order;
@@ -1056,22 +1130,87 @@ async function handlePlaceOrder() {
   }
 }
 
-/* ── Past orders ────────────────────────────────────────────────────── */
+/**
+ * FIX N5: Saves full order to 'localbuy_orders' array in localStorage.
+ * Strips photoDataUrl to avoid quota issues.
+ */
+function saveOrderToLocalStorage(order) {
+  const key    = 'localbuy_orders';
+  let   orders = [];
+  try {
+    orders = JSON.parse(localStorage.getItem(key) || '[]');
+  } catch (_) {
+    orders = [];
+  }
 
+  // Store without photo binary data to avoid 5MB quota
+  const orderToStore = Object.assign({}, order, { photoDataUrl: null });
+
+  // Update existing order if same id, otherwise prepend
+  const existingIdx = orders.findIndex(o => o.id === order.id);
+  if (existingIdx >= 0) {
+    orders[existingIdx] = orderToStore;
+  } else {
+    orders.unshift(orderToStore);
+  }
+
+  // Keep last 50 orders
+  try {
+    localStorage.setItem(key, JSON.stringify(orders.slice(0, 50)));
+  } catch (e) {
+    console.warn('[saveOrderToLocalStorage] Storage quota hit, trimming history.');
+    try {
+      localStorage.setItem(key, JSON.stringify(orders.slice(0, 10)));
+    } catch (_) {}
+  }
+}
+
+/**
+ * updateOrderInLocalStorage(orderId, updates) — patches an existing order in 'localbuy_orders'.
+ */
+function updateOrderInLocalStorage(orderId, updates) {
+  const key    = 'localbuy_orders';
+  let   orders = [];
+  try { orders = JSON.parse(localStorage.getItem(key) || '[]'); } catch (_) {}
+
+  const idx = orders.findIndex(o => o.id === orderId);
+  if (idx >= 0) {
+    orders[idx] = Object.assign({}, orders[idx], updates, { updatedAt: new Date().toISOString() });
+    try { localStorage.setItem(key, JSON.stringify(orders)); } catch (_) {}
+  }
+}
+
+/* ── Past orders — FIX N6 ───────────────────────────────────────────── */
+
+/**
+ * FIX N6: Past orders panel reads from 'localbuy_orders' in localStorage
+ * and renders them with their current status.
+ */
 function initPastOrders() {
-  const toggle   = document.getElementById('past-orders-toggle');
-  const list     = document.getElementById('past-orders-list');
+  const toggle = document.getElementById('past-orders-toggle');
+  const list   = document.getElementById('past-orders-list');
   if (!toggle || !list) return;
 
-  const history = getOrderHistory();
-  if (!history.length) {
+  // Read from 'localbuy_orders' (FIX N6)
+  let orders = [];
+  try {
+    orders = JSON.parse(localStorage.getItem('localbuy_orders') || '[]');
+  } catch (_) {
+    orders = [];
+  }
+
+  // Fallback to legacy lb_orderHistory if localbuy_orders is empty
+  if (!orders.length) {
+    orders = getOrderHistory();
+  }
+
+  if (!orders.length) {
     toggle.style.display = 'none';
     return;
   }
 
   toggle.style.display = 'flex';
 
-  // Clone to remove old listeners
   const newToggle = toggle.cloneNode(true);
   toggle.parentNode.replaceChild(newToggle, toggle);
 
@@ -1082,20 +1221,36 @@ function initPastOrders() {
     list.setAttribute('aria-hidden', String(expanded));
   });
 
-  list.innerHTML = history.slice(0, 3).map(o => `
-    <div class="past-order-item" data-order-text="${encodeURIComponent(o.text || '')}" tabindex="0" role="button" aria-label="Re-use order from ${o.shopName}">
-      <div class="past-order-shop">${o.shopName}</div>
-      <div class="past-order-preview">${(o.text || '').substring(0, 60)}${o.text && o.text.length > 60 ? '…' : ''}</div>
-      <span class="past-order-reuse">↩ Re-use this list</span>
-    </div>
-  `).join('');
+  const statusLabels = {
+    pending: '🟡 Pending',
+    quoted:  '💬 Quoted',
+    packing: '📦 Packing',
+    ready:   '✅ Ready',
+    cancelled: '❌ Cancelled',
+    completed: '✔ Completed'
+  };
 
-  // FIX M6: Navigate to order first, then populate textarea via a callback
-  // so initCharCounter fires properly on the freshly-rendered textarea.
+  list.innerHTML = orders.slice(0, 5).map(o => {
+    const statusBadge = o.status ? `<span class="past-order-status">${statusLabels[o.status] || o.status}</span>` : '';
+    const preview = (o.text || '').substring(0, 60) + (o.text && o.text.length > 60 ? '…' : '');
+    return `
+      <div
+        class="past-order-item"
+        data-order-text="${encodeURIComponent(o.text || '')}"
+        tabindex="0"
+        role="button"
+        aria-label="Re-use order from ${o.shopName}"
+      >
+        <div class="past-order-shop">${o.shopName || ''}${statusBadge}</div>
+        <div class="past-order-preview">${preview || '(photo order)'}</div>
+        <span class="past-order-reuse">↩ Re-use this list</span>
+      </div>
+    `;
+  }).join('');
+
   list.querySelectorAll('.past-order-item').forEach(item => {
     item.addEventListener('click', () => {
       const text = decodeURIComponent(item.dataset.orderText);
-      // Store the prefill text temporarily; onEnterOrder will pick it up
       AppState._prefillOrderText = text;
       navigate('order');
     });
@@ -1108,26 +1263,35 @@ function initPastOrders() {
 function saveOrderToHistory(order) {
   const key     = 'lb_orderHistory';
   const history = JSON.parse(localStorage.getItem(key) || '[]');
-  history.unshift({ shopName: order.shopName, text: order.text, createdAt: order.createdAt });
-  localStorage.setItem(key, JSON.stringify(history.slice(0, 10)));
+  history.unshift({
+    shopName:  order.shopName,
+    text:      order.text,
+    status:    order.status,
+    createdAt: order.createdAt
+  });
+  try {
+    localStorage.setItem(key, JSON.stringify(history.slice(0, 10)));
+  } catch (_) {}
 }
 
 function getOrderHistory() {
-  return JSON.parse(localStorage.getItem('lb_orderHistory') || '[]');
+  try {
+    return JSON.parse(localStorage.getItem('lb_orderHistory') || '[]');
+  } catch (_) {
+    return [];
+  }
 }
 
-
-/* ─── SECTION: TRACKER ───────────────────────────────────────────────
-   4-stage vertical timeline. Live countdown. Order code card.
-*/
+/* ─── SECTION: TRACKER ───────────────────────────────────────────── */
 
 const TRACKER_STAGES = ['pending', 'quoted', 'packing', 'ready'];
 
-let countdownTimer  = null;
-let estimatedReady  = null;
+let countdownTimer = null;
+let estimatedReady = null;
+let demoTimer      = null; // FIX L2
 
-// FIX L2: Store demo simulation timer ID so it can be cleared on re-entry.
-let demoTimer = null;
+// FIX N8: 3-second polling interval for order status sync
+let statusPollTimer = null;
 
 function onEnterTracker() {
   const order = AppState.currentOrder;
@@ -1138,7 +1302,7 @@ function onEnterTracker() {
   setElText('order-code', order.id || 'LB-XXXX');
 
   const shop    = AppState.currentShop;
-  const readyIn = shop ? parseInt(shop.ready) : 10;
+  const readyIn = shop ? parseInt(shop.ready) || 10 : 10;
   estimatedReady = new Date(Date.now() + readyIn * 60 * 1000);
 
   startCountdown(estimatedReady);
@@ -1146,7 +1310,7 @@ function onEnterTracker() {
   AppState.orderStatus = order.status || 'pending';
   updateTrackerUI(AppState.orderStatus);
 
-  // Cancel order button — clone to avoid listener accumulation
+  // Cancel order button — clone
   const cancelBtn = document.getElementById('cancel-order-btn');
   if (cancelBtn) {
     const newCancelBtn = cancelBtn.cloneNode(true);
@@ -1161,7 +1325,7 @@ function onEnterTracker() {
     });
   }
 
-  // Quote buttons — clone to avoid accumulation
+  // Quote buttons — clone
   const acceptBtn  = document.getElementById('accept-quote-btn');
   const declineBtn = document.getElementById('decline-quote-btn');
   if (acceptBtn) {
@@ -1198,32 +1362,86 @@ function onEnterTracker() {
     newOtherBtn.addEventListener('click', () => navigate('order'));
   }
 
-  // FIX H3: Use DB.listenOrder (single-order listener) not DB.listenOrders (shop listener)
+  // FIX H3: Use DB.listenOrder (single-order listener)
   startOrderListener(order.id);
 
-  // FIX L2: Clear any previous demo timer before starting a new one
+  // FIX L2: Clear any previous demo timer
   clearInterval(demoTimer);
   demoTimer = null;
   simulateOrderProgression();
+
+  // FIX N8: Start 3-second polling for status sync with shopkeeper page
+  startStatusPolling(order.id);
 }
 
 /**
- * updateTrackerUI(status) — advances the timeline to the given stage.
+ * FIX N8: startStatusPolling — polls DB every 3 seconds for order status updates.
+ * This complements the Firestore real-time listener and ensures status changes
+ * made on the shopkeeper page are reflected promptly even if the listener lags.
  */
+function startStatusPolling(orderId) {
+  clearInterval(statusPollTimer);
+  statusPollTimer = null;
+
+  if (!orderId) return;
+
+  statusPollTimer = setInterval(async () => {
+    try {
+      const updatedOrder = await DB.getOrder(orderId);
+      if (!updatedOrder) return;
+
+      // Only update if status actually changed
+      if (updatedOrder.status && updatedOrder.status !== AppState.orderStatus) {
+        AppState.orderStatus = updatedOrder.status;
+        updateTrackerUI(updatedOrder.status);
+
+        // Sync to localbuy_orders
+        updateOrderInLocalStorage(orderId, { status: updatedOrder.status });
+
+        if (updatedOrder.status === 'quoted') {
+          showQuote(updatedOrder.amount, updatedOrder.shopkeeperNote);
+        }
+        if (updatedOrder.status === 'ready') {
+          showToast('🎉 Your order is ready! Walk in to collect.', 'success');
+          clearInterval(statusPollTimer);
+          statusPollTimer = null;
+        }
+        if (updatedOrder.status === 'cancelled') {
+          showToast('Order was cancelled.', 'info');
+          clearInterval(statusPollTimer);
+          statusPollTimer = null;
+          setTimeout(() => navigate('browse'), 2000);
+        }
+      }
+    } catch (err) {
+      // Silently swallow polling errors (network issues, etc.)
+      console.warn('[statusPoll] Error fetching order:', err);
+    }
+  }, 3000);
+}
+
+function stopStatusPolling() {
+  clearInterval(statusPollTimer);
+  statusPollTimer = null;
+}
+
 function updateTrackerUI(status) {
-  const stages = document.querySelectorAll('.timeline-stage');
+  const stages     = document.querySelectorAll('.timeline-stage');
   const currentIdx = TRACKER_STAGES.indexOf(status);
 
-  stages.forEach((stage, i) => {
+  stages.forEach((stage) => {
     const stageName = stage.dataset.stage;
     const idx       = TRACKER_STAGES.indexOf(stageName);
 
     stage.classList.remove('completed');
     stage.removeAttribute('aria-current');
 
+    const dot = stage.querySelector('.stage-dot');
+    if (!dot) return;
+
     if (idx < currentIdx) {
       stage.classList.add('completed');
-      stage.querySelector('.stage-dot').innerHTML = `
+      dot.innerHTML = `
         <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
           <circle cx="11" cy="11" r="11" fill="var(--color-sage)"/>
           <path d="M6.5 11l3 3 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1231,14 +1449,14 @@ function updateTrackerUI(status) {
       `;
     } else if (idx === currentIdx) {
       stage.setAttribute('aria-current', 'true');
-      stage.querySelector('.stage-dot').innerHTML = `
+      dot.innerHTML = `
         <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
           <circle cx="11" cy="11" r="10" stroke="var(--color-sage)" stroke-width="2"/>
           <circle cx="11" cy="11" r="5" fill="var(--color-sage)"/>
         </svg>
       `;
     } else {
-      stage.querySelector('.stage-dot').innerHTML = `
+      dot.innerHTML = `
         <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
           <circle cx="11" cy="11" r="10" stroke="var(--color-border)" stroke-width="2"/>
         </svg>
@@ -1254,18 +1472,18 @@ function updateTrackerUI(status) {
 
   const orderCodeCard = document.getElementById('order-code-card');
   if (orderCodeCard) {
-    const showCode = status === 'packing' || status === 'ready';
-    orderCodeCard.style.display = showCode ? 'block' : 'none';
+    orderCodeCard.style.display = (status === 'packing' || status === 'ready') ? 'block' : 'none';
   }
 
   if (status === 'ready') {
     clearInterval(countdownTimer);
     const countdownEl = document.getElementById('tracker-countdown');
     if (countdownEl) countdownEl.innerHTML = '✅ Ready for pickup!';
+    stopStatusPolling();
   }
 }
 
-/* ── Countdown timer ───────────────────────────────────────────────── */
+/* ── Countdown timer ────────────────────────────────────────────────── */
 
 function startCountdown(targetDate) {
   clearInterval(countdownTimer);
@@ -1295,6 +1513,7 @@ function showQuote(amount, notes) {
 
 function acceptQuote() {
   DB.updateOrderStatus(AppState.currentOrder.id, 'packing', {});
+  updateOrderInLocalStorage(AppState.currentOrder.id, { status: 'packing' });
   updateTrackerUI('packing');
   showToast('Quote accepted! Your order is being packed.', 'success');
 }
@@ -1305,30 +1524,31 @@ function cancelCurrentOrder() {
   const order = AppState.currentOrder;
   if (!order) return;
   DB.cancelOrder(order.id, 'customer_cancelled');
+  updateOrderInLocalStorage(order.id, { status: 'cancelled' });
   clearInterval(countdownTimer);
   clearInterval(demoTimer);
   demoTimer = null;
+  stopStatusPolling();
   showToast('Order cancelled. The shopkeeper has been notified.', 'info');
   setTimeout(() => navigate('browse'), 1500);
 }
 
-/* ── Order listener stub ────────────────────────────────────────────── */
+/* ── Order listener — FIX H3 ────────────────────────────────────────── */
 
 /**
- * startOrderListener(orderId) — subscribes to single-order updates.
- *
- * FIX H3: Now calls DB.listenOrder (single-order listener keyed by orderId)
- * instead of DB.listenOrders (which is the shop-level listener keyed by shopId).
- * @param {string} orderId
+ * FIX H3: Uses DB.listenOrder (single-order listener keyed by orderId).
  */
 function startOrderListener(orderId) {
-  if (AppState.unsubscribeOrders) AppState.unsubscribeOrders();
+  if (AppState.unsubscribeOrders) {
+    AppState.unsubscribeOrders();
+    AppState.unsubscribeOrders = null;
+  }
 
-  // FIX H3: DB.listenOrder for customer tracker, not DB.listenOrders
   AppState.unsubscribeOrders = DB.listenOrder(orderId, (updatedOrder) => {
     if (!updatedOrder) return;
     AppState.orderStatus = updatedOrder.status;
     updateTrackerUI(updatedOrder.status);
+    updateOrderInLocalStorage(orderId, { status: updatedOrder.status });
 
     if (updatedOrder.status === 'quoted') {
       showQuote(updatedOrder.amount, updatedOrder.shopkeeperNote);
@@ -1336,15 +1556,13 @@ function startOrderListener(orderId) {
   });
 }
 
-/* ── DEMO: Simulated status progression ─────────────────────────────
-   FIX L2: Uses module-level demoTimer to prevent double-interval issue.
-*/
+/* ── Demo simulation — FIX L2 ──────────────────────────────────────── */
+
 function simulateOrderProgression() {
   const sequence = ['pending', 'quoted', 'packing', 'ready'];
   let step = 0;
 
-  // FIX L2: Clear any existing timer before starting a new one
-  clearInterval(demoTimer);
+  clearInterval(demoTimer); // FIX L2: always clear before re-running
 
   demoTimer = setInterval(() => {
     step++;
@@ -1357,21 +1575,21 @@ function simulateOrderProgression() {
     const newStatus = sequence[step];
     AppState.orderStatus = newStatus;
     updateTrackerUI(newStatus);
+    updateOrderInLocalStorage(
+      AppState.currentOrder ? AppState.currentOrder.id : '',
+      { status: newStatus }
+    );
 
     if (newStatus === 'quoted') {
       showQuote(347, 'No Tata Salt — added Captain Cook 1kg ✓\nMaggi available ✓');
     }
-
     if (newStatus === 'ready') {
       showToast('🎉 Your order is ready! Walk in to collect.', 'success');
     }
   }, 8000);
 }
 
-
-/* ─── CONFIRM DIALOG ─────────────────────────────────────────────────
-   Replaces browser confirm(). No alert() or confirm() used.
-*/
+/* ─── CONFIRM DIALOG ─────────────────────────────────────────────── */
 
 function showConfirmDialog(title, body, onConfirm, onCancel) {
   const dialog    = document.getElementById('confirm-dialog');
@@ -1382,8 +1600,8 @@ function showConfirmDialog(title, body, onConfirm, onCancel) {
 
   if (!dialog) return;
 
-  if (titleEl)   titleEl.textContent = title;
-  if (bodyEl)    bodyEl.textContent  = body;
+  if (titleEl) titleEl.textContent = title;
+  if (bodyEl)  bodyEl.textContent  = body;
 
   dialog.style.display = 'flex';
   dialog.removeAttribute('aria-hidden');
@@ -1397,23 +1615,24 @@ function showConfirmDialog(title, body, onConfirm, onCancel) {
     cancelBtn && cancelBtn.removeEventListener('click', handleCancel);
   };
 
-  const handleOk = () => { cleanup(); onConfirm && onConfirm(); };
-  const handleCancel = () => { cleanup(); onCancel && onCancel(); };
+  const handleOk     = () => { cleanup(); onConfirm && onConfirm(); };
+  const handleCancel = () => { cleanup(); onCancel  && onCancel();  };
 
   okBtn     && okBtn.addEventListener('click', handleOk);
   cancelBtn && cancelBtn.addEventListener('click', handleCancel);
 
   const escHandler = (e) => {
-    if (e.key === 'Escape') { cleanup(); onCancel && onCancel(); document.removeEventListener('keydown', escHandler); }
+    if (e.key === 'Escape') {
+      cleanup();
+      onCancel && onCancel();
+      document.removeEventListener('keydown', escHandler);
+    }
   };
   document.addEventListener('keydown', escHandler);
 }
 
+/* ─── TOAST NOTIFICATIONS ────────────────────────────────────────── */
 
-/* ─── TOAST NOTIFICATIONS ────────────────────────────────────────────
-   showToast(message, type) — shows a dismissible toast message.
-   Delegates to the #toast-container in the DOM.
-*/
 function showToast(message, type = 'info') {
   const container = document.getElementById('toast-container');
   if (!container) return;
@@ -1422,11 +1641,12 @@ function showToast(message, type = 'info') {
   toast.className = `toast toast-${type}`;
   toast.textContent = message;
   toast.setAttribute('role', 'alert');
+  toast.setAttribute('aria-live', 'assertive');
 
   container.appendChild(toast);
 
   setTimeout(() => {
-    toast.style.opacity = '0';
+    toast.style.opacity   = '0';
     toast.style.transform = 'translateY(8px)';
     toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
     setTimeout(() => {
@@ -1435,8 +1655,7 @@ function showToast(message, type = 'info') {
   }, 3500);
 }
 
-
-/* ─── UTILITY FUNCTIONS ─────────────────────────────────────────────── */
+/* ─── UTILITY FUNCTIONS ──────────────────────────────────────────── */
 
 function setElText(id, text) {
   const el = document.getElementById(id);
@@ -1451,8 +1670,8 @@ function parseTimeToDate(timeStr) {
   const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
   if (!match) throw new Error('Cannot parse time: ' + timeStr);
 
-  let hours   = parseInt(match[1]);
-  const mins  = parseInt(match[2]);
+  let hours  = parseInt(match[1]);
+  const mins = parseInt(match[2]);
   const period = match[3].toUpperCase();
 
   if (period === 'PM' && hours !== 12) hours += 12;
@@ -1469,44 +1688,58 @@ function formatTime12(date) {
 
 function formatCurrency(amount) {
   try {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency', currency: 'INR', maximumFractionDigits: 0
+    }).format(amount);
   } catch (_) {
     return `₹${Number(amount).toFixed(0)}`;
   }
 }
 
-
-/* ─── INIT ───────────────────────────────────────────────────────────── */
+/* ─── INIT ──────────────────────────────────────────────────────── */
 
 function init() {
   initModalListeners();
 
-  const hash = window.location.hash.replace('#', '');
+  const hash          = window.location.hash.replace('#', '');
   const validSections = ['browse', 'order', 'checkout', 'tracker'];
   const startSection  = validSections.includes(hash) ? hash : 'browse';
 
   navigate(startSection);
 
-  const savedOrder = localStorage.getItem('lb_currentOrder');
-  if (savedOrder && startSection === 'tracker') {
-    try {
-      AppState.currentOrder = JSON.parse(savedOrder);
-      AppState.currentShop = MOCK_SHOPS.find(s => s.id === AppState.currentOrder.shopId) || null;
-    } catch (e) {
-      console.warn('[Init] Could not restore saved order');
+  // Restore saved order for tracker deep-link
+  if (startSection === 'tracker') {
+    const savedOrder = localStorage.getItem('lb_currentOrder');
+    if (savedOrder) {
+      try {
+        const parsed = JSON.parse(savedOrder);
+        if (parsed && parsed.id) {
+          AppState.currentOrder = parsed;
+          AppState.currentShop  = (window.MOCK_SHOPS || []).find(s => s.id === parsed.shopId) || null;
+        }
+      } catch (e) {
+        console.warn('[Init] Could not restore saved order');
+      }
     }
   }
 
-  // Handle prefill from past-order re-use (set by initPastOrders before navigate)
+  // Handle prefill from past-order re-use
   if (AppState._prefillOrderText && startSection === 'order') {
     const textarea = document.getElementById('order-text');
     if (textarea) {
       textarea.value = AppState._prefillOrderText;
-      // Trigger input event so char counter updates
       textarea.dispatchEvent(new Event('input'));
     }
     AppState._prefillOrderText = null;
   }
+
+  // Clean up polling and timers on page unload
+  window.addEventListener('beforeunload', () => {
+    stopStatusPolling();
+    clearInterval(countdownTimer);
+    clearInterval(demoTimer);
+    if (AppState.unsubscribeOrders) AppState.unsubscribeOrders();
+  });
 
   DB.logEvent('customer_app_init', { section: startSection });
 }

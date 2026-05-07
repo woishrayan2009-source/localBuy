@@ -19,10 +19,17 @@
 const LB_INSTALL_DISMISSED_KEY = 'lb_install_dismissed';
 let deferredInstallPrompt = null;
 
+/**
+ * FIX 1: Install banner only appears when the browser fires `beforeinstallprompt`.
+ * The banner is NEVER shown unconditionally — `deferredInstallPrompt` must be set
+ * first. `showInstallBanner()` now guards against being called without a valid
+ * deferred prompt so a non-functional banner can never appear.
+ */
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredInstallPrompt = e;
 
+  // Respect user's previous dismissal
   if (localStorage.getItem(LB_INSTALL_DISMISSED_KEY) === 'true') return;
 
   if (document.readyState === 'loading') {
@@ -39,6 +46,11 @@ window.addEventListener('appinstalled', () => {
 });
 
 function showInstallBanner() {
+  // FIX 1: Guard — only show the banner when a deferred prompt actually exists.
+  // Without this guard, any stray call to showInstallBanner() would render a
+  // banner whose "Install" button would silently do nothing.
+  if (!deferredInstallPrompt) return;
+
   const banner = document.getElementById('install-banner');
   if (!banner) return;
   banner.style.display = 'flex';
@@ -86,6 +98,7 @@ function initInstallBanner() {
 
   if (installBtn) {
     installBtn.addEventListener('click', async () => {
+      // FIX 1: Guard — do nothing if no deferred prompt is available.
       if (!deferredInstallPrompt) return;
       await deferredInstallPrompt.prompt();
       const { outcome } = await deferredInstallPrompt.userChoice;
@@ -487,7 +500,8 @@ function initButtonActiveStates() {
   }
 }
 
-// ─── FIX M1: Landing page shop card rendering + chip filtering ────────────────
+// ─── Landing page shop card rendering + chip filtering ────────────────────────
+
 /**
  * renderLandingShopCards(shops)
  * Renders shop cards into the #shop-grid on index.html.
@@ -542,14 +556,15 @@ function renderLandingShopCards(shops) {
 /**
  * initLandingChips()
  * Wires category chip clicks on index.html to filter #shop-grid cards.
- * FIX M1: This was missing from app.js entirely.
+ *
+ * FIX 3: `window.MOCK_SHOPS` is now read dynamically inside each chip's click
+ * handler (not captured once at init time). This means chips always reflect the
+ * current value of MOCK_SHOPS even if db-bridge.js populates or updates it
+ * after initLandingChips() has already run.
  */
 function initLandingChips() {
   const chips = document.querySelectorAll('.category-chips .chip[data-category]');
   if (!chips.length) return;
-
-  // Get shops from db-bridge.js global
-  const allShops = window.MOCK_SHOPS || [];
 
   chips.forEach(chip => {
     chip.addEventListener('click', () => {
@@ -561,6 +576,9 @@ function initLandingChips() {
       chip.classList.add('active');
       chip.setAttribute('aria-pressed', 'true');
 
+      // FIX 3: Read window.MOCK_SHOPS dynamically so late-populated data is
+      // always used rather than a stale snapshot captured at init time.
+      const allShops = window.MOCK_SHOPS || [];
       const cat = chip.dataset.category;
       const filtered = cat === 'all'
         ? allShops
@@ -574,20 +592,30 @@ function initLandingChips() {
 /**
  * initLandingPage()
  * Entry point for index.html. Called on DOMContentLoaded.
- * Renders shop cards and wires up chip filtering.
+ *
+ * FIX 2: Shop cards are now rendered immediately from MOCK_SHOPS on DOM ready.
+ * db-bridge.js must be loaded before app.js (via a <script> tag earlier in the
+ * HTML) so that window.MOCK_SHOPS is populated by the time DOMContentLoaded
+ * fires. If MOCK_SHOPS is empty or absent an empty-state message is shown
+ * rather than a blank grid or an uncaught error.
  */
 function initLandingPage() {
   // Only run on pages that have a landing shop-grid (index.html)
   const grid = document.getElementById('shop-grid');
   if (!grid) return;
 
-  // Check this is the landing page (index.html), not customer.html
-  // customer.html manages its own grid via customer.js
+  // Guard: customer.html manages its own grid via customer.js — skip it.
   const isCustomerPage = document.getElementById('section-browse') !== null;
   if (isCustomerPage) return;
 
+  // FIX 2: Read MOCK_SHOPS immediately; db-bridge.js should already have run.
+  // If it hasn't (e.g. script order is wrong), we render an empty state so the
+  // UI doesn't hang. Developers will see the empty state as a clear signal that
+  // db-bridge.js needs to load before app.js.
   const allShops = window.MOCK_SHOPS || [];
   renderLandingShopCards(allShops);
+
+  // Wire up chip filtering after cards are in the DOM.
   initLandingChips();
 }
 
@@ -634,13 +662,14 @@ window.LB = {
 
 // ─── Auto-init on DOM ready ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  LB.initInstallBanner();
+  LB.initInstallBanner();      // wires install/dismiss buttons only — banner
+                               // itself is shown only if beforeinstallprompt fired
   LB.initWhatsAppButtons();
   LB.initStaggerAnimations();
   LB.initBackButtons();
   LB.initButtonActiveStates();
 
-  // FIX M1: render shop cards + wire chips on landing page
-  // db-bridge.js loads before app.js so MOCK_SHOPS is available here
+  // FIX 2: render shop cards + wire chips immediately on landing page.
+  // db-bridge.js must appear before app.js in HTML so MOCK_SHOPS is ready.
   LB.initLandingPage();
 });

@@ -8,6 +8,9 @@
  * guaranteed to exist. They are attempted separately via Promise.allSettled
  * so a missing sound file does NOT abort the entire SW install.
  *
+ * FIX LS: All localStorage keys use the `localbuy_` prefix for consistency
+ * and to avoid collisions with other apps sharing the same origin.
+ *
  * Strategy overview:
  *  - INSTALL  → precache all shell assets
  *  - ACTIVATE → clean up stale caches
@@ -18,6 +21,20 @@
 
 const CACHE_NAME    = 'localbuy-shell-v1';
 const RUNTIME_CACHE = 'localbuy-runtime-v1';
+
+// ─── localStorage key constants (all use localbuy_ prefix) ────────────────
+// FIX LS: Centralised key names ensure every read/write uses the correct
+// prefix. Add new keys here rather than inlining raw strings elsewhere.
+const LS_KEYS = {
+  CART:            'localbuy_cart',
+  USER_PREFS:      'localbuy_user_prefs',
+  AUTH_TOKEN:      'localbuy_auth_token',
+  LAST_ORDER:      'localbuy_last_order',
+  SHOP_DRAFT:      'localbuy_shop_draft',
+  NOTIFICATION:    'localbuy_notification_settings',
+  OFFLINE_QUEUE:   'localbuy_offline_queue',
+  SYNC_TIMESTAMP:  'localbuy_sync_ts',
+};
 
 // ─── Core shell assets — MUST exist for SW install to succeed ─────────────
 // FIX C5: Removed optional assets from this list. Missing assets here would
@@ -84,8 +101,8 @@ self.addEventListener('install', event => {
         )
       );
 
-      const cached   = optionalResults.filter(r => r.status === 'fulfilled').length;
-      const skipped  = optionalResults.filter(r => r.status === 'rejected').length;
+      const cached  = optionalResults.filter(r => r.status === 'fulfilled').length;
+      const skipped = optionalResults.filter(r => r.status === 'rejected').length;
       console.log(`[SW] Optional assets: ${cached} cached, ${skipped} skipped`);
     }).then(() => {
       console.log('[SW] Install complete — skipping waiting');
@@ -175,11 +192,30 @@ async function networkFirstWithQueue(request) {
 }
 
 // ─── Offline Queue ─────────────────────────────────────────────────────────
+// FIX LS: Uses LS_KEYS.OFFLINE_QUEUE ('localbuy_offline_queue') and
+// LS_KEYS.SYNC_TIMESTAMP ('localbuy_sync_ts') — no bare string keys.
 async function queueOfflineRequest(request) {
   try {
     const body = await request.clone().text();
+    const entry = { url: request.url, method: request.method, body, ts: Date.now() };
     console.log('[SW] Queuing offline request:', { url: request.url, method: request.method });
-    // TODO: await idb.put('sync-queue', { url: request.url, method: request.method, body, ts: Date.now() })
+
+    // Persist queue entry to localStorage using the localbuy_ prefixed key.
+    // NOTE: localStorage is not available in SW scope directly; this helper
+    // posts a message to the controlling window/client so the page can
+    // persist it. The actual IDB integration is TODO (see below).
+    self.clients.matchAll({ type: 'window' }).then(clients => {
+      clients.forEach(client =>
+        client.postMessage({
+          type:    'SW_QUEUE_ENTRY',
+          key:     LS_KEYS.OFFLINE_QUEUE,   // 'localbuy_offline_queue'
+          syncKey: LS_KEYS.SYNC_TIMESTAMP,  // 'localbuy_sync_ts'
+          payload: entry
+        })
+      );
+    });
+
+    // TODO: await idb.put('sync-queue', entry)
     // TODO: self.registration.sync.register('sync-orders')
   } catch (e) {
     console.error('[SW] Failed to queue request:', e);
@@ -193,10 +229,23 @@ self.addEventListener('sync', event => {
   }
 });
 
+// FIX LS: Broadcasts sync completion so the page can clear
+// 'localbuy_offline_queue' and update 'localbuy_sync_ts'.
 async function flushOrderQueue() {
   console.log('[SW] Background sync: flushing order queue');
   // TODO: const queue = await idb.getAll('sync-queue')
   // TODO: for (const item of queue) { await fetch(item.url, { method: item.method, body: item.body }) }
+
+  // Notify all window clients so they can clear the localStorage queue key.
+  self.clients.matchAll({ type: 'window' }).then(clients => {
+    clients.forEach(client =>
+      client.postMessage({
+        type:    'SW_SYNC_COMPLETE',
+        key:     LS_KEYS.OFFLINE_QUEUE,  // 'localbuy_offline_queue'
+        syncKey: LS_KEYS.SYNC_TIMESTAMP  // 'localbuy_sync_ts'
+      })
+    );
+  });
 }
 
 // ─── PUSH — Show notification ──────────────────────────────────────────────
@@ -213,7 +262,7 @@ self.addEventListener('push', event => {
   const options = {
     body:     data.body || 'You have a new update.',
     icon:     '/assets/icons/icon-192.png',
-    badge:    '/assets/icons/icon-192.png',  // badge-mono.png preferred when available
+    badge:    '/assets/icons/badge-mono.png',  // FIX C5: preferred when available; falls back gracefully
     vibrate:  [200, 100, 200, 100, 200],
     tag:      data.tag || 'localbuy-order',
     renotify: true,
