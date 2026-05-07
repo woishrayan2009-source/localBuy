@@ -424,9 +424,11 @@
 
       <!-- Greeting block -->
       <div class="shift-greeting">
+        <!-- FIX 1: Removed data-i18n="shift.greeting" so i18n.render() cannot
+             overwrite the full greeting+name string set by shopkeeper.js
+             populateShiftStartScreen(). shopkeeper.js owns this element's text. -->
         <p class="shift-greeting-text" id="shift-greeting-name">
-          <!-- JS sets: "Good morning, Rajesh 👋" -->
-          <span data-i18n="shift.greeting">Good morning</span> 👋
+          Good morning 👋
         </p>
         <h1 class="shift-shop-name font-display" id="shift-shop-name-display">
           <!-- JS populates from localStorage -->
@@ -1531,7 +1533,10 @@
  *   2. Determine which screen to show on load
  *   3. Attach lang-toggle listeners (safety net in case shopkeeper.js
  *      hasn't attached them yet)
- *   4. Export showScreen() for shopkeeper.js to call
+ *
+ * Registration logic (handleRegistration, validateRegistrationForm,
+ * attachLiveValidation) and the #btn-register click listener have been
+ * removed from this inline script — they live entirely in shopkeeper.js.
  *
  * All heavy logic lives in js/shopkeeper.js.
  * All DB calls go through js/db-bridge.js.
@@ -1621,20 +1626,26 @@ function loadShopProfile() {
 
 /**
  * hydrateUIFromProfile(profile)
- * Populates all shop-name and owner-name display elements
- * from the stored localbuy_shopProfile, so the UI reflects
- * the registered shop without re-reading disparate localStorage keys.
+ * Populates shop-name display elements from the stored localbuy_shopProfile
+ * so the UI reflects the registered shop without re-reading disparate
+ * localStorage keys.
+ *
+ * NOTE: The greeting text (#shift-greeting-name) is intentionally NOT set
+ * here. shopkeeper.js's populateShiftStartScreen() is the sole owner of
+ * that element, constructing the full "Good morning, Rajesh 👋" string.
+ * Setting it here would race against i18n.render() and shopkeeper.js.
+ *
  * @param {Object} profile
  */
 function hydrateUIFromProfile(profile) {
-  // Shift-start screen
+  // FIX 2: Only update shop-name display elements — safe to set before
+  // shopkeeper.js runs. The greeting text is owned by shopkeeper.js.
+
+  // Shift-start screen: shop name heading
   const shopNameEl = document.getElementById('shift-shop-name-display');
   if (shopNameEl && profile.shopName) shopNameEl.textContent = profile.shopName;
 
-  const greetingEl = document.getElementById('shift-greeting-name');
-  if (greetingEl && profile.ownerName) greetingEl.dataset.ownerName = profile.ownerName;
-
-  // Dashboard topbar
+  // Dashboard topbar: shop name
   const dashShopName = document.getElementById('dash-shop-name');
   if (dashShopName && profile.shopName) dashShopName.textContent = profile.shopName;
 
@@ -1654,208 +1665,6 @@ function hydrateUIFromProfile(profile) {
   // Pre-hide the registration form card since shopkeeper is already registered
   const registerCard = document.getElementById('section-register');
   if (registerCard) registerCard.hidden = true;
-}
-
-// ─── [FIX 2] Form validation helpers ──────────────────────────
-/**
- * showFieldError(inputId, errorId)
- * Marks an input as invalid and shows its associated error message.
- */
-function showFieldError(inputId, errorId) {
-  const input = document.getElementById(inputId);
-  const error = document.getElementById(errorId);
-  if (input)  input.classList.add('invalid');
-  if (error)  error.classList.add('visible');
-}
-
-/**
- * clearFieldError(inputId, errorId)
- * Removes invalid state and hides the error message.
- */
-function clearFieldError(inputId, errorId) {
-  const input = document.getElementById(inputId);
-  const error = document.getElementById(errorId);
-  if (input)  input.classList.remove('invalid');
-  if (error)  error.classList.remove('visible');
-}
-
-/**
- * validateRegistrationForm()
- * Validates all required registration fields.
- * Shows inline error messages for invalid fields.
- * Returns true only if all fields pass.
- * @returns {boolean}
- */
-function validateRegistrationForm() {
-  let valid = true;
-
-  // Shop name
-  const shopName = document.getElementById('input-shop-name');
-  if (!shopName || !shopName.value.trim()) {
-    showFieldError('input-shop-name', 'error-shop-name');
-    valid = false;
-  } else {
-    clearFieldError('input-shop-name', 'error-shop-name');
-  }
-
-  // Owner name
-  const ownerName = document.getElementById('input-owner-name');
-  if (!ownerName || !ownerName.value.trim()) {
-    showFieldError('input-owner-name', 'error-owner-name');
-    valid = false;
-  } else {
-    clearFieldError('input-owner-name', 'error-owner-name');
-  }
-
-  // Category
-  const category = document.getElementById('input-category');
-  if (!category || !category.value) {
-    showFieldError('input-category', 'error-category');
-    valid = false;
-  } else {
-    clearFieldError('input-category', 'error-category');
-  }
-
-  // Area
-  const area = document.getElementById('input-area');
-  if (!area || !area.value.trim()) {
-    showFieldError('input-area', 'error-area');
-    valid = false;
-  } else {
-    clearFieldError('input-area', 'error-area');
-  }
-
-  // Phone: must be 10 digits, starting 6–9
-  const phone = document.getElementById('input-phone');
-  const phonePattern = /^[6-9][0-9]{9}$/;
-  if (!phone || !phonePattern.test(phone.value.trim())) {
-    showFieldError('input-phone', 'error-phone');
-    valid = false;
-  } else {
-    clearFieldError('input-phone', 'error-phone');
-  }
-
-  // Hours: close must be after open; last-order must be before close
-  const openTime  = document.getElementById('input-open-time');
-  const closeTime = document.getElementById('input-close-time');
-  const lastOrder = document.getElementById('input-last-order');
-  const hoursErr  = document.getElementById('error-hours');
-  let hoursValid  = true;
-
-  if (openTime && closeTime && lastOrder) {
-    if (closeTime.value <= openTime.value) hoursValid = false;
-    if (lastOrder.value >= closeTime.value) hoursValid = false;
-  }
-
-  if (!hoursValid) {
-    if (hoursErr) hoursErr.classList.add('visible');
-    valid = false;
-  } else {
-    if (hoursErr) hoursErr.classList.remove('visible');
-  }
-
-  // UPI: optional but validate format if filled
-  const upi = document.getElementById('input-upi');
-  const upiError = document.getElementById('error-upi');
-  if (upi && upi.value.trim()) {
-    // Basic UPI VPA pattern: alphanumeric.@provider
-    const upiPattern = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9]+$/;
-    if (!upiPattern.test(upi.value.trim())) {
-      showFieldError('input-upi', 'error-upi');
-      valid = false;
-    } else {
-      clearFieldError('input-upi', 'error-upi');
-    }
-  } else {
-    if (upiError) upiError.classList.remove('visible');
-    if (upi) upi.classList.remove('invalid');
-  }
-
-  // Scroll to first error for mobile UX
-  if (!valid) {
-    const firstError = document.querySelector('.error-msg.visible');
-    if (firstError) {
-      firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }
-
-  return valid;
-}
-
-/**
- * attachLiveValidation()
- * Clears error state on each field as the user corrects it (live feedback).
- */
-function attachLiveValidation() {
-  const fieldMap = [
-    ['input-shop-name',  'error-shop-name'],
-    ['input-owner-name', 'error-owner-name'],
-    ['input-category',   'error-category'],
-    ['input-area',       'error-area'],
-    ['input-phone',      'error-phone'],
-    ['input-upi',        'error-upi'],
-  ];
-  fieldMap.forEach(([inputId, errorId]) => {
-    const el = document.getElementById(inputId);
-    if (!el) return;
-    const event = el.tagName === 'SELECT' ? 'change' : 'input';
-    el.addEventListener(event, () => clearFieldError(inputId, errorId));
-  });
-
-  // Hours: clear error when any time input changes
-  ['input-open-time', 'input-close-time', 'input-last-order'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('change', () => {
-      const hoursErr = document.getElementById('error-hours');
-      if (hoursErr) hoursErr.classList.remove('visible');
-    });
-  });
-}
-
-/**
- * handleRegistration()
- * Called when #btn-register is clicked.
- * Validates the form; if valid, builds and persists localbuy_shopProfile,
- * then transitions to the shift-start screen.
- */
-function handleRegistration() {
-  if (!validateRegistrationForm()) return;
-
-  try {
-    const profile = {
-      shopId:    'LB-' + Date.now(),
-      shopName:  document.getElementById('input-shop-name').value.trim(),
-      ownerName: document.getElementById('input-owner-name').value.trim(),
-      category:  document.getElementById('input-category').value,
-      area:      document.getElementById('input-area').value.trim(),
-      phone:     document.getElementById('input-phone').value.trim(),
-      openTime:  document.getElementById('input-open-time').value,
-      closeTime: document.getElementById('input-close-time').value,
-      lastOrder: document.getElementById('input-last-order').value,
-      upi:       (document.getElementById('input-upi').value || '').trim(),
-      registeredAt: new Date().toISOString(),
-    };
-
-    // Persist as localbuy_shopProfile (primary key used throughout the app)
-    localStorage.setItem('localbuy_shopProfile', JSON.stringify(profile));
-
-    // Also write legacy keys so existing shopkeeper.js code keeps working
-    // without modification until it's migrated to read localbuy_shopProfile
-    localStorage.setItem('lb_shop_id',    profile.shopId);
-    localStorage.setItem('lb_shop_name',  profile.shopName);
-    localStorage.setItem('lb_owner_name', profile.ownerName);
-    localStorage.setItem('lb_open_time',  profile.openTime);
-    localStorage.setItem('lb_close_time', profile.closeTime);
-
-    hydrateUIFromProfile(profile);
-    showScreen('shift-start');
-
-    // Notify shopkeeper.js that a profile was just created
-    window.dispatchEvent(new CustomEvent('lb:profileCreated', { detail: profile }));
-
-  } catch(e) {
-    console.error('[LocalBuy] Registration save failed:', e);
-  }
 }
 
 // ─── [FIX 3] Initial screen decision ──────────────────────────
@@ -1897,7 +1706,6 @@ function determineInitialScreen() {
 // ─── Boot ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initLangToggles();
-  attachLiveValidation();
 
   const initialScreen = determineInitialScreen();
   showScreen(initialScreen);
@@ -1908,18 +1716,17 @@ document.addEventListener('DOMContentLoaded', () => {
     hydrateUIFromProfile(profile);
   }
 
-  // Attach registration button handler
-  const btnRegister = document.getElementById('btn-register');
-  if (btnRegister) {
-    btnRegister.addEventListener('click', handleRegistration);
-  }
-
   // [FIX 3] If returning via #register hash, reveal the register form
   if (window.location.hash === '#register') {
     showScreen('register');
     const registerCard = document.getElementById('section-register');
     if (registerCard) registerCard.hidden = false;
   }
+
+  // Signal to shopkeeper.js that the inline bootstrap has completed
+  // screen routing. shopkeeper.js checks window.__lbBootDone before
+  // running its own screen-routing logic to avoid double transitions.
+  window.__lbBootDone = true;
 });
 </script>
 

@@ -108,7 +108,7 @@
   line-height: 1.7;
 }
 
-.start-shift-btn {
+.btn-start-shift {
   background: var(--color-sage);
   color: #fff;
   border: none;
@@ -126,13 +126,13 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.start-shift-btn:hover {
+.btn-start-shift:hover {
   background: var(--color-sage-mid);
   box-shadow: 0 12px 32px rgba(15,92,58,0.35);
   transform: translateY(-2px);
 }
 
-.start-shift-btn:active {
+.btn-start-shift:active {
   transform: scale(0.97) translateY(0);
   box-shadow: 0 4px 12px rgba(15,92,58,0.2);
 }
